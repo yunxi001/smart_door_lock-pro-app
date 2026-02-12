@@ -1,0 +1,44 @@
+npm warn Unknown cli config "--run". This will stop working in the next major version of npm.
+npm warn Unknown cli config "--reporter". This will stop working in the next major version of npm.
+
+> 鏅鸿兘闂ㄩ攣-pro@0.0.0 test
+> vitest --run test/localStorageService-properties.test.ts
+
+
+[1m[46m RUN [49m[22m [36mv4.0.16 [39m[90mC:/Users/yunxi/Desktop/graduation_project/xiaozhi-server/鏅鸿兘闂ㄩ攣-pro[39m
+
+[90mstdout[2m | test/localStorageService-properties.test.ts[2m > [22m[2mLocalStorageService - 灞炴€ф祴璇?[2m > [22m[2m灞炴€?1: 鏁版嵁寰€杩斾竴鑷存€?[2m > [22m[2m瀵逛簬浠绘剰浜鸿劯鏁版嵁锛屼繚瀛樺悗璇诲彇搴斿緱鍒扮浉鍚屾暟鎹?[22m[39m鏁版嵁搴撳崌绾? v0 -> v2
+鍒涘缓瀵硅薄瀛樺偍: deviceStatus
+鍒涘缓瀵硅薄瀛樺偍: videos
+鍒涘缓瀵硅薄瀛樺偍: persons
+鍒涘缓瀵硅薄瀛樺偍: fingerprints
+鍒涘缓瀵硅薄瀛樺偍: nfcCards
+鍒涘缓瀵硅薄瀛樺偍: tempPasswords
+鍒涘缓瀵硅薄瀛樺偍: unlockLogs
+鍒涘缓瀵硅薄瀛樺偍: eventLogs
+鍒涘缓瀵硅薄瀛樺偍: visitRecords
+鍒涘缓瀵硅薄瀛樺偍: recentActivities
+鍒涘缓瀵硅薄瀛樺偍: appSettings
+
+[90mstdout[2m | test/localStorageService-properties.test.ts[2m > [22m[2mLocalStorageService - 灞炴€ф祴璇?[2m > [22m[2m灞炴€?1: 鏁版嵁寰€杩斾竴鑷存€?[2m > [22m[2m瀵逛簬浠绘剰浜鸿劯鏁版嵁锛屼繚瀛樺悗璇诲彇搴斿緱鍒扮浉鍚屾暟鎹?[22m[39m鏁版嵁搴?SmartDoorlockDB v2 鍒濆鍖栨垚鍔?
+[90mstdout[2m | test/localStorageService-properties.test.ts[2m > [22m[2mLocalStorageService - 灞炴€ф祴璇?[2m > [22m[2m灞炴€?10: 鎵归噺鎿嶄綔鍘熷瓙鎬?[2m > [22m[2m鎵归噺淇濆瓨鎴愬姛鏃讹紝鎵€鏈夋暟鎹兘搴旇琚繚瀛?[22m[39m鏁版嵁搴撳崌绾? v0 -> v2
+鍒涘缓瀵硅薄瀛樺偍: deviceStatus
+鍒涘缓瀵硅薄瀛樺偍: videos
+鍒涘缓瀵硅薄瀛樺偍: persons
+鍒涘缓瀵硅薄瀛樺偍: fingerprints
+鍒涘缓瀵硅薄瀛樺偍: nfcCards
+鍒涘缓瀵硅薄瀛樺偍: tempPasswords
+鍒涘缓瀵硅薄瀛樺偍: unlockLogs
+鍒涘缓瀵硅薄瀛樺偍: eventLogs
+鍒涘缓瀵硅薄瀛樺偍: visitRecords
+鍒涘缓瀵硅薄瀛樺偍: recentActivities
+鍒涘缓瀵硅薄瀛樺偍: appSettings
+
+[90mstdout[2m | test/localStorageService-properties.test.ts[2m > [22m[2mLocalStorageService - 灞炴€ф祴璇?[2m > [22m[2m灞炴€?10: 鎵归噺鎿嶄綔鍘熷瓙鎬?[2m > [22m[2m鎵归噺淇濆瓨鎴愬姛鏃讹紝鎵€鏈夋暟鎹兘搴旇琚繚瀛?[22m[39m鏁版嵁搴?SmartDoorlockDB v2 鍒濆鍖栨垚鍔?
+ [32m鉁?[39m test/localStorageService-properties.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 20:13:27
+[2m   Duration [22m 1.57s[2m (transform 96ms, setup 189ms, import 254ms, tests 63ms, environment 853ms)[22m
+

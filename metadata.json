@@ -1,0 +1,7 @@
+{
+  "name": "智能门锁 Pro",
+  "description": "ESP32 智能门锁的现代化界面，支持视频流、双向对讲和人脸管理。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

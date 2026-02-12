@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>按钮样式测试 - 智能门锁 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: {
+                50: "#f0f4f8",
+                100: "#d9e2ec",
+                200: "#bcccdc",
+                300: "#9fb3c8",
+                400: "#829ab1",
+                500: "#627d98",
+                600: "#486581",
+                700: "#334e68",
+                800: "#243b53",
+                900: "#102a43",
+                950: "#0a1929",
+              },
+              secondary: {
+                50: "#f8fafc",
+                100: "#f1f5f9",
+                200: "#e2e8f0",
+                300: "#cbd5e1",
+                400: "#94a3b8",
+                500: "#64748b",
+                600: "#475569",
+                700: "#334155",
+                800: "#1e293b",
+                900: "#0f172a",
+                950: "#020617",
+              },
+              success: {
+                50: "#f0fdf4",
+                100: "#dcfce7",
+                200: "#bbf7d0",
+                300: "#86efac",
+                400: "#4ade80",
+                500: "#22c55e",
+                600: "#16a34a",
+                700: "#15803d",
+                800: "#166534",
+                900: "#14532d",
+                950: "#052e16",
+              },
+              warning: {
+                50: "#fffbeb",
+                100: "#fef3c7",
+                200: "#fde68a",
+                300: "#fcd34d",
+                400: "#fbbf24",
+                500: "#f59e0b",
+                600: "#d97706",
+                700: "#b45309",
+                800: "#92400e",
+                900: "#78350f",
+                950: "#451a03",
+              },
+              error: {
+                50: "#fef2f2",
+                100: "#fee2e2",
+                200: "#fecaca",
+                300: "#fca5a5",
+                400: "#f87171",
+                500: "#ef4444",
+                600: "#dc2626",
+                700: "#b91c1c",
+                800: "#991b1b",
+                900: "#7f1d1d",
+                950: "#450a0a",
+              },
+              info: {
+                50: "#ecfeff",
+                100: "#cffafe",
+                200: "#a5f3fc",
+                300: "#67e8f9",
+                400: "#22d3ee",
+                500: "#06b6d4",
+                600: "#0891b2",
+                700: "#0e7490",
+                800: "#155e75",
+                900: "#164e63",
+                950: "#083344",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-secondary-50 dark:bg-secondary-950 min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+      <!-- 头部 -->
+      <div class="mb-8 flex items-center justify-between">
+        <div>
+          <h1
+            class="text-3xl font-bold text-secondary-900 dark:text-secondary-50 mb-2"
+          >
+            按钮样式测试
+          </h1>
+          <p class="text-secondary-600 dark:text-secondary-300">
+            智能门锁 Pro 配色系统 - 可复用按钮组件
+          </p>
+        </div>
+        <button
+          id="themeToggle"
+          class="px-4 py-2 bg-secondary-200 hover:bg-secondary-300 dark:bg-secondary-800 dark:hover:bg-secondary-700 text-secondary-900 dark:text-secondary-50 rounded-lg transition-colors"
+        >
+          切换深色模式
+        </button>
+      </div>
+
+      <!-- 基本按钮变体 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          1. 基本按钮变体
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Primary -->
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              Primary（主要）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 active:bg-primary-700 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              提交
+            </button>
+          </div>
+
+          <!-- Secondary -->
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              Secondary（次要）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-secondary-100 text-secondary-900 hover:bg-secondary-200 active:bg-secondary-300 dark:bg-secondary-800 dark:text-secondary-50 dark:hover:bg-secondary-700 font-medium rounded-lg transition-colors duration-200"
+            >
+              取消
+            </button>
+          </div>
+
+          <!-- Error -->
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              Error（危险）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-error-500 text-white hover:bg-error-600 active:bg-error-700 dark:bg-error-600 dark:hover:bg-error-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              删除
+            </button>
+          </div>
+
+          <!-- Info -->
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              Info（信息）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-info-500 text-white hover:bg-info-600 active:bg-info-700 dark:bg-info-600 dark:hover:bg-info-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              查看详情
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 按钮尺寸 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          2. 按钮尺寸
+        </h2>
+        <div class="flex flex-wrap items-center gap-4">
+          <button
+            class="px-3 py-1.5 text-sm bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+          >
+            小按钮 (sm)
+          </button>
+          <button
+            class="px-4 py-2 text-base bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+          >
+            中等按钮 (md)
+          </button>
+          <button
+            class="px-6 py-3 text-lg bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+          >
+            大按钮 (lg)
+          </button>
+        </div>
+      </section>
+
+      <!-- 按钮状态 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          3. 按钮状态
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              默认状态
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              默认
+            </button>
+          </div>
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              悬停状态（鼠标悬停）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-primary-600 text-white dark:bg-primary-500 font-medium rounded-lg"
+            >
+              悬停
+            </button>
+          </div>
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              激活状态（点击时）
+            </p>
+            <button
+              class="w-full px-4 py-2 bg-primary-700 text-white dark:bg-primary-400 font-medium rounded-lg"
+            >
+              激活
+            </button>
+          </div>
+          <div>
+            <p
+              class="text-sm text-secondary-600 dark:text-secondary-300 mb-2"
+            >
+              禁用状态
+            </p>
+            <button
+              disabled
+              class="w-full px-4 py-2 bg-secondary-300 text-secondary-500 dark:bg-secondary-700 dark:text-secondary-500 font-medium rounded-lg cursor-not-allowed"
+            >
+              禁用
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 图标按钮 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          4. 图标按钮
+        </h2>
+        <div class="flex flex-wrap gap-4">
+          <button
+            class="p-2 text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900 rounded-full transition-colors duration-200"
+            title="编辑"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path
+                d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+              />
+            </svg>
+          </button>
+          <button
+            class="p-2 text-error-500 hover:text-error-600 hover:bg-error-50 dark:text-error-400 dark:hover:bg-error-900 rounded-full transition-colors duration-200"
+            title="删除"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path
+                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+              />
+            </svg>
+          </button>
+          <button
+            class="p-2 text-secondary-600 hover:text-secondary-900 hover:bg-secondary-100 dark:text-secondary-400 dark:hover:text-secondary-100 dark:hover:bg-secondary-800 rounded-full transition-colors duration-200"
+            title="设置"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 1v6m0 6v6m-6-6h6m6 0h6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"
+              />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- 虚线边框按钮 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          5. 虚线边框按钮（用于添加操作）
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            class="w-full py-4 bg-primary-50 text-primary-600 hover:bg-primary-100 dark:bg-primary-950 dark:text-primary-400 dark:hover:bg-primary-900 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2 border-2 border-dashed border-primary-200 dark:border-primary-800"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>添加人脸</span>
+          </button>
+          <button
+            class="w-full py-4 bg-secondary-50 text-secondary-600 hover:bg-secondary-100 dark:bg-secondary-900 dark:text-secondary-400 dark:hover:bg-secondary-800 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2 border-2 border-dashed border-secondary-200 dark:border-secondary-700"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>添加指纹</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 文本按钮 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          6. 文本按钮（无背景）
+        </h2>
+        <div class="flex flex-wrap gap-6">
+          <button
+            class="text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300 transition-colors duration-200"
+          >
+            查看更多
+          </button>
+          <button
+            class="text-secondary-600 hover:text-secondary-900 hover:underline dark:text-secondary-400 dark:hover:text-secondary-100 transition-colors duration-200"
+          >
+            取消
+          </button>
+          <button
+            class="text-error-600 hover:text-error-700 hover:underline dark:text-error-400 dark:hover:text-error-300 transition-colors duration-200"
+          >
+            删除
+          </button>
+        </div>
+      </section>
+
+      <!-- 实际场景示例 -->
+      <section
+        class="bg-white dark:bg-secondary-900 rounded-xl p-6 mb-6 shadow-sm"
+      >
+        <h2
+          class="text-xl font-semibold text-secondary-900 dark:text-secondary-50 mb-4"
+        >
+          7. 实际场景示例
+        </h2>
+
+        <!-- 表单提交 -->
+        <div class="mb-6">
+          <h3
+            class="text-lg font-medium text-secondary-900 dark:text-secondary-50 mb-3"
+          >
+            表单提交
+          </h3>
+          <div class="flex gap-3">
+            <button
+              class="flex-1 px-4 py-2 bg-secondary-100 text-secondary-900 hover:bg-secondary-200 dark:bg-secondary-800 dark:text-secondary-50 dark:hover:bg-secondary-700 font-medium rounded-lg transition-colors duration-200"
+            >
+              取消
+            </button>
+            <button
+              class="flex-1 px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              提交
+            </button>
+          </div>
+        </div>
+
+        <!-- 确认对话框 -->
+        <div class="mb-6">
+          <h3
+            class="text-lg font-medium text-secondary-900 dark:text-secondary-50 mb-3"
+          >
+            确认对话框
+          </h3>
+          <div class="flex gap-3">
+            <button
+              class="flex-1 px-4 py-2 bg-secondary-100 text-secondary-900 hover:bg-secondary-200 dark:bg-secondary-800 dark:text-secondary-50 dark:hover:bg-secondary-700 font-medium rounded-lg transition-colors duration-200"
+            >
+              取消
+            </button>
+            <button
+              class="flex-1 px-4 py-2 bg-error-500 text-white hover:bg-error-600 dark:bg-error-600 dark:hover:bg-error-500 font-medium rounded-lg transition-colors duration-200"
+            >
+              确认删除
+            </button>
+          </div>
+        </div>
+
+        <!-- 列表操作 -->
+        <div>
+          <h3
+            class="text-lg font-medium text-secondary-900 dark:text-secondary-50 mb-3"
+          >
+            列表操作
+          </h3>
+          <div
+            class="flex items-center justify-between p-4 bg-secondary-50 dark:bg-secondary-800 rounded-lg"
+          >
+            <div>
+              <p
+                class="font-medium text-secondary-900 dark:text-secondary-50"
+              >
+                张三
+              </p>
+              <p class="text-sm text-secondary-600 dark:text-secondary-300">
+                全天候访问
+              </p>
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="p-2 text-primary-500 hover:text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900 rounded-full transition-colors duration-200"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                  />
+                  <path
+                    d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="p-2 text-error-500 hover:text-error-600 hover:bg-error-50 dark:text-error-400 dark:hover:bg-error-900 rounded-full transition-colors duration-200"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path
+                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // 主题切换功能
+      const themeToggle = document.getElementById("themeToggle");
+      const html = document.documentElement;
+
+      // 从 localStorage 读取主题偏好
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark") {
+        html.classList.add("dark");
+      }
+
+      themeToggle.addEventListener("click", () => {
+        html.classList.toggle("dark");
+        const isDark = html.classList.contains("dark");
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+      });
+    </script>
+  </body>
+</html>
