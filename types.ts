@@ -102,7 +102,9 @@ export type SubScreen =
   | "password-management"
   | "unlock-logs"
   | "event-logs"
-  | "visit-records";
+  | "visit-records"
+  | "visitor-intent-detail" // v2.5 新增：访客意图详情页
+  | "package-alert-detail"; // v2.5 新增：快递警报详情页
 
 // ============================================
 // 指纹管理类型 (需求 11.3, 11.9)
@@ -468,4 +470,98 @@ export interface DoorlockUsersQueryResult {
   total: number;
   limit: number;
   offset: number;
+}
+
+// ============================================
+// 协议 v2.5 新增类型 - 访客意图识别和快递看护
+// ============================================
+
+/**
+ * 意图类型枚举
+ * 协议 v2.5 新增
+ */
+export type IntentType =
+  | "delivery" // 快递配送
+  | "visit" // 拜访
+  | "sales" // 推销
+  | "maintenance" // 维修
+  | "other"; // 其他
+
+/**
+ * 威胁等级枚举
+ * 协议 v2.5 新增
+ */
+export type ThreatLevel = "low" | "medium" | "high";
+
+/**
+ * 行为类型枚举
+ * 协议 v2.5 新增
+ */
+export type ActionType =
+  | "normal" // 正常
+  | "passing" // 路过
+  | "searching" // 翻找
+  | "taking" // 拿走
+  | "damaging"; // 破坏
+
+/**
+ * 对话消息接口
+ * 协议 v2.5 新增
+ */
+export interface DialogueMessage {
+  role: "assistant" | "user"; // 角色：AI助手或用户
+  content: string; // 对话内容
+}
+
+/**
+ * 快递检查结果接口
+ * 协议 v2.5 新增
+ */
+export interface PackageCheck {
+  threat_level: ThreatLevel; // 威胁等级
+  action: ActionType; // 行为类型
+  description: string; // 行为描述
+}
+
+/**
+ * 访客意图记录接口
+ * 协议 v2.5 新增
+ */
+export interface VisitorIntent {
+  id: number; // IndexedDB自动生成的主键
+  visit_id: number; // 服务器visit_id
+  session_id: string; // 会话ID
+  person_id: number | null; // 人员ID（可能为空）
+  person_name: string; // 访客姓名
+  relation_type: "family" | "friend" | "unknown"; // 关系类型
+  intent_type: IntentType; // 意图类型
+  intent_summary: {
+    intent_type: string; // 意图类型字符串
+    summary: string; // 简要总结
+    important_notes: string[]; // 重要信息列表
+    ai_analysis: string; // AI详细分析
+  };
+  dialogue_history: DialogueMessage[]; // 对话历史
+  package_check?: PackageCheck; // 快递检查结果（可选）
+  created_at: string; // 创建时间（ISO 8601格式）
+  ts: number; // 时间戳（毫秒）
+}
+
+/**
+ * 快递警报记录接口
+ * 协议 v2.5 新增
+ */
+export interface PackageAlert {
+  id: number; // IndexedDB自动生成的主键
+  device_id: string; // 设备ID
+  session_id: string; // 会话ID
+  threat_level: ThreatLevel; // 威胁等级
+  action: ActionType; // 行为类型
+  description: string; // 行为描述
+  photo_path: string; // 照片路径
+  photo_thumbnail?: string; // 缩略图路径（前端生成）
+  voice_warning_sent: boolean; // 是否已发送语音警告
+  notified: boolean; // 是否已通知用户
+  created_at: string; // 创建时间（ISO 8601格式）
+  ts: number; // 时间戳（毫秒）
 }

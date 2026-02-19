@@ -4,9 +4,12 @@ import {
   VisitNotificationModal,
   VisitNotificationData,
 } from "./components/VisitNotificationModal";
+import { Toast } from "./components/Toast";
 import { HomeScreen } from "./screens/HomeScreen";
 import { MonitorScreen } from "./screens/MonitorScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import VisitorIntentScreen from "./screens/VisitorIntentScreen";
+import PackageAlertScreen from "./screens/PackageAlertScreen";
 import { deviceService } from "./services/DeviceService";
 import {
   deviceStatusStorage,
@@ -26,6 +29,9 @@ import {
   NFCCard,
   TempPassword,
   VideoAttachment,
+  VisitorIntent,
+  PackageAlert,
+  SubScreen,
 } from "./types";
 import { Lock } from "lucide-react";
 
@@ -96,6 +102,42 @@ export default function App() {
     [],
   );
 
+  // ============================================
+  // v2.5 协议新增状态 - 访客意图和快递警报
+  // ============================================
+
+  // 访客意图记录（保留最近100条）
+  const [visitorIntents, setVisitorIntents] = useState<VisitorIntent[]>([]);
+
+  // 快递警报记录（保留最近100条）
+  const [packageAlerts, setPackageAlerts] = useState<PackageAlert[]>([]);
+
+  // Toast通知队列（需求: 2.5）
+  const [toastQueue, setToastQueue] = useState<
+    Array<{
+      id: string;
+      message: string;
+      type: "info" | "warning" | "error";
+    }>
+  >([]);
+
+  // ============================================
+  // v2.5 协议新增路由状态 - 详情页导航
+  // ============================================
+
+  // 当前子页面（用于详情页导航）
+  const [currentSubScreen, setCurrentSubScreen] = useState<SubScreen | null>(
+    null,
+  );
+
+  // 选中的访客意图（用于详情页展示）
+  const [selectedIntent, setSelectedIntent] = useState<VisitorIntent | null>(
+    null,
+  );
+
+  // 选中的快递警报列表（用于详情页展示，传递整个列表用于筛选）
+  const [selectedAlerts, setSelectedAlerts] = useState<PackageAlert[]>([]);
+
   // 到访通知弹窗状态
   const [visitNotification, setVisitNotification] =
     useState<VisitNotificationData | null>(null);
@@ -148,6 +190,26 @@ export default function App() {
         if (cached.recentActivities.length > 0) {
           setRecentActivities(cached.recentActivities);
           console.log(`已加载 ${cached.recentActivities.length} 条最近动态`);
+        }
+
+        // v2.5 新增：加载访客意图和快递警报缓存数据
+        // 需求: 18.1, 18.2, 18.3, 18.4, 18.5
+        try {
+          const cachedVisitorIntents =
+            await localStorageService.getVisitorIntents(100);
+          if (cachedVisitorIntents.length > 0) {
+            setVisitorIntents(cachedVisitorIntents);
+            console.log(`已加载 ${cachedVisitorIntents.length} 条访客意图数据`);
+          }
+
+          const cachedPackageAlerts =
+            await localStorageService.getPackageAlerts(100);
+          if (cachedPackageAlerts.length > 0) {
+            setPackageAlerts(cachedPackageAlerts);
+            console.log(`已加载 ${cachedPackageAlerts.length} 条快递警报数据`);
+          }
+        } catch (error) {
+          console.error("加载访客意图和快递警报缓存失败:", error);
         }
 
         // 恢复上次的 Tab 状态（用户体验优化）
@@ -240,6 +302,32 @@ export default function App() {
 
     initAndLoadCachedStatus();
   }, [currentDeviceId]);
+
+  /**
+   * 切换到首页时触发查询
+   * 需求: 18.1, 18.2, 18.3, 18.4, 18.5, 22.3
+   *
+   * 功能：
+   * 1. 当用户切换到首页且设备已连接时，查询最新数据
+   * 2. 实现查询错误处理和重试逻辑
+   */
+  useEffect(() => {
+    // 只在切换到首页且设备已连接时触发查询
+    if (currentTab === "home" && status === "connected") {
+      try {
+        // 查询最近5条访客意图
+        deviceService.queryVisitorIntents({ limit: 5 });
+
+        // 查询最近5条快递警报
+        deviceService.queryPackageAlerts({ limit: 5 });
+
+        console.log("已触发访客意图和快递警报查询");
+      } catch (error) {
+        console.error("触发查询失败:", error);
+        // 错误不中断应用，用户可以手动刷新
+      }
+    }
+  }, [currentTab, status]);
 
   useEffect(() => {
     // 订阅服务事件
@@ -822,6 +910,158 @@ export default function App() {
       },
     );
 
+    // ============================================
+    // v2.5 协议新增事件订阅 - 访客意图和快递警报
+    // ============================================
+
+    // 订阅访客意图事件
+    // 需求: 1.5, 2.1, 2.2, 12.1
+    const unsubVisitorIntent = deviceService.on(
+      "visitor_intent",
+      async (_, data) => {
+        try {
+          // 构造完整的 VisitorIntent 对象
+          const visitorIntent: VisitorIntent = {
+            id: 0, // IndexedDB 自动生成
+            visit_id: data.visit_id,
+            session_id: data.session_id,
+            person_id: data.person_info?.person_id || null,
+            person_name: data.person_info?.name || "未知访客",
+            relation_type: data.person_info?.relation_type || "unknown",
+            intent_type: data.intent_summary?.intent_type || "other",
+            intent_summary: data.intent_summary,
+            dialogue_history: data.dialogue_history || [],
+            package_check: data.package_check,
+            created_at: new Date().toISOString(),
+            ts: data.ts || Date.now(),
+          };
+
+          // 1. 更新内存状态（保留最近100条）
+          setVisitorIntents((prev) => [visitorIntent, ...prev].slice(0, 100));
+
+          // 2. 显示Toast通知
+          const personName = visitorIntent.person_name;
+          const summary = visitorIntent.intent_summary?.summary || "新访客到访";
+          addToast(`新访客: ${personName} - ${summary}`, "info");
+
+          // 3. 保存到IndexedDB
+          await localStorageService.saveVisitorIntent(visitorIntent);
+          console.log("访客意图已保存到本地存储");
+        } catch (error) {
+          console.error("处理访客意图事件失败:", error);
+        }
+      },
+    );
+
+    // 订阅快递警报事件
+    // 需求: 6.4, 7.1, 7.2, 7.3, 7.4, 7.5, 13.1
+    const unsubPackageAlert = deviceService.on(
+      "package_alert",
+      async (_, data) => {
+        try {
+          // 构造完整的 PackageAlert 对象
+          const packageAlert: PackageAlert = {
+            id: 0, // IndexedDB 自动生成
+            device_id: currentDeviceId,
+            session_id: data.session_id,
+            threat_level: data.threat_level,
+            action: data.action,
+            description: data.description,
+            photo_path: data.photo_path || "",
+            photo_thumbnail: data.photo_thumbnail,
+            voice_warning_sent: data.voice_warning_sent || false,
+            notified: false,
+            created_at: new Date().toISOString(),
+            ts: data.ts || Date.now(),
+          };
+
+          // 1. 更新内存状态（保留最近100条）
+          setPackageAlerts((prev) => [packageAlert, ...prev].slice(0, 100));
+
+          // 2. 中威胁及以上显示Toast通知
+          if (
+            packageAlert.threat_level === "medium" ||
+            packageAlert.threat_level === "high"
+          ) {
+            addToast(
+              `快递警报: ${packageAlert.description}`,
+              packageAlert.threat_level === "high" ? "error" : "warning",
+            );
+          }
+
+          // 3. 保存到IndexedDB
+          await localStorageService.savePackageAlert(packageAlert);
+          console.log("快递警报已保存到本地存储");
+        } catch (error) {
+          console.error("处理快递警报事件失败:", error);
+        }
+      },
+    );
+
+    // 订阅访客意图查询结果事件
+    // 需求: 5.4, 10.4, 18.1, 18.2, 18.3, 18.4
+    const unsubVisitorIntentsQueryResult = deviceService.on(
+      "visitor_intents_query_result",
+      async (_, result) => {
+        try {
+          const records = result.data || [];
+
+          // 数据合并去重逻辑（按session_id去重）
+          setVisitorIntents((prev) => {
+            const existingSessionIds = new Set(
+              prev.map((item) => item.session_id),
+            );
+            const newRecords = records.filter(
+              (record: any) => !existingSessionIds.has(record.session_id),
+            );
+
+            // 合并新旧数据，保留最近100条
+            return [...newRecords, ...prev].slice(0, 100);
+          });
+
+          // 保存新记录到IndexedDB
+          for (const record of records) {
+            await localStorageService.saveVisitorIntent(record);
+          }
+
+          console.log(`访客意图查询结果已处理，共 ${records.length} 条`);
+        } catch (error) {
+          console.error("处理访客意图查询结果失败:", error);
+        }
+      },
+    );
+
+    // 订阅快递警报查询结果事件
+    // 需求: 5.4, 10.4, 18.1, 18.2, 18.3, 18.4
+    const unsubPackageAlertsQueryResult = deviceService.on(
+      "package_alerts_query_result",
+      async (_, result) => {
+        try {
+          const records = result.data || [];
+
+          // 数据合并去重逻辑（按ts去重）
+          setPackageAlerts((prev) => {
+            const existingTs = new Set(prev.map((item) => item.ts));
+            const newRecords = records.filter(
+              (record: any) => !existingTs.has(record.ts),
+            );
+
+            // 合并新旧数据，保留最近100条
+            return [...newRecords, ...prev].slice(0, 100);
+          });
+
+          // 保存新记录到IndexedDB
+          for (const record of records) {
+            await localStorageService.savePackageAlert(record);
+          }
+
+          console.log(`快递警报查询结果已处理，共 ${records.length} 条`);
+        } catch (error) {
+          console.error("处理快递警报查询结果失败:", error);
+        }
+      },
+    );
+
     return () => {
       unsubLog();
       unsubStatus();
@@ -840,6 +1080,10 @@ export default function App() {
       unsubPasswordResult();
       unsubMediaDownload();
       unsubMediaProgress();
+      unsubVisitorIntent();
+      unsubPackageAlert();
+      unsubVisitorIntentsQueryResult();
+      unsubPackageAlertsQueryResult();
       deviceService.disconnect();
 
       // 清理 Tab 保存定时器
@@ -943,6 +1187,64 @@ export default function App() {
     setTimeout(() => setVisitNotification(null), 300);
   };
 
+  // ============================================
+  // v2.5 协议新增导航函数 - 详情页切换
+  // 需求: 3.5, 4.8, 8.5, 9.9
+  // ============================================
+
+  /**
+   * 导航到访客意图详情页
+   * @param intent 选中的访客意图记录
+   */
+  const handleViewIntentDetail = (intent: VisitorIntent) => {
+    setSelectedIntent(intent);
+    setCurrentSubScreen("visitor-intent-detail");
+    console.log("导航到访客意图详情页:", intent.session_id);
+  };
+
+  /**
+   * 导航到快递警报详情页
+   */
+  const handleViewAllAlerts = () => {
+    setSelectedAlerts(packageAlerts);
+    setCurrentSubScreen("package-alert-detail");
+    console.log("导航到快递警报详情页");
+  };
+
+  /**
+   * 返回首页
+   * 清除子页面状态和选中的数据
+   */
+  const handleBackToHome = () => {
+    setCurrentSubScreen(null);
+    setSelectedIntent(null);
+    setSelectedAlerts([]);
+    console.log("返回首页");
+  };
+
+  /**
+   * 添加Toast通知到队列
+   * 需求: 2.5
+   * @param message 通知消息
+   * @param type 通知类型
+   */
+  const addToast = (
+    message: string,
+    type: "info" | "warning" | "error" = "info",
+  ) => {
+    const id = Math.random().toString(36).substring(2, 11);
+    setToastQueue((prev) => [...prev, { id, message, type }]);
+  };
+
+  /**
+   * 从队列中移除Toast通知
+   * 需求: 2.5
+   * @param id Toast的唯一标识
+   */
+  const removeToast = (id: string) => {
+    setToastQueue((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
   // 状态文本映射
   const statusTextMap: Record<ConnectionStatus, string> = {
     connected: "已连接",
@@ -975,85 +1277,110 @@ export default function App() {
 
       {/* 主内容区域 */}
       <main className="flex-1 overflow-hidden relative p-5">
-        {currentTab === "home" && (
-          <HomeScreen
-            status={status}
-            deviceStatus={deviceStatus}
-            recentActivities={recentActivities}
-            lastStatusUpdate={lastStatusUpdate}
-            onUnlock={handleUnlock}
-            onLock={handleLock}
+        {/* 如果有子页面，优先显示子页面 */}
+        {currentSubScreen === "visitor-intent-detail" && selectedIntent ? (
+          <VisitorIntentScreen
+            intent={selectedIntent}
+            onBack={handleBackToHome}
           />
-        )}
-        {currentTab === "monitor" && (
-          <MonitorScreen
-            status={status}
-            deviceStatus={deviceStatus}
-            videoSrc={videoSrc}
-            stats={stats}
-            isTalking={isTalking}
-            onToggleTalk={handleToggleTalk}
+        ) : currentSubScreen === "package-alert-detail" ? (
+          <PackageAlertScreen
+            alerts={selectedAlerts}
+            onBack={handleBackToHome}
           />
-        )}
-        {currentTab === "settings" && (
-          <SettingsScreen
-            logs={logs}
-            status={status}
-            persons={persons}
-            visits={visits}
-            onClearLogs={clearLogs}
-            // 新增功能数据 (任务 17.1)
-            fingerprints={fingerprints}
-            nfcCards={nfcCards}
-            tempPasswords={tempPasswords}
-            // 新增回调函数 (任务 17.2)
-            onFingerprintAdd={(name) => {
-              deviceService.sendUserMgmtCommand("finger", "add", 0, name);
-            }}
-            onFingerprintDelete={(id) => {
-              deviceService.sendUserMgmtCommand("finger", "del", id);
-            }}
-            onNfcCardAdd={(name) => {
-              deviceService.sendUserMgmtCommand("nfc", "add", 0, name);
-            }}
-            onNfcCardDelete={(id) => {
-              deviceService.sendUserMgmtCommand("nfc", "del", id);
-            }}
-            onAdminPasswordModify={(currentPwd, newPwd) => {
-              deviceService.sendUserMgmtCommand("password", "set", 0, newPwd);
-            }}
-            onTempPasswordCreate={(name, type, options) => {
-              // 生成随机6位密码
-              const password = Math.floor(
-                100000 + Math.random() * 900000,
-              ).toString();
-              // 计算有效期
-              let expires = 24 * 60 * 60; // 默认24小时
-              if (type === "time_limited" && options?.validUntil) {
-                const validUntilDate = new Date(options.validUntil);
-                expires = Math.floor(
-                  (validUntilDate.getTime() - Date.now()) / 1000,
-                );
-              } else if (type === "count_limited") {
-                expires = 7 * 24 * 60 * 60; // 限次密码默认7天
-              }
-              deviceService.sendCommand({
-                type: "lock_control",
-                command: "temp_code",
-                code: password,
-                expires: expires,
-                name: name,
-                password_type: type,
-                max_uses: options?.maxUses,
-              });
-            }}
-            onTempPasswordDelete={(id) => {
-              deviceService.sendUserMgmtCommand("password", "del", id);
-            }}
-            // 主题切换 (任务 2.3)
-            theme={theme}
-            onToggleTheme={toggleTheme}
-          />
+        ) : (
+          <>
+            {/* 主 Tab 页面 */}
+            {currentTab === "home" && (
+              <HomeScreen
+                status={status}
+                deviceStatus={deviceStatus}
+                recentActivities={recentActivities}
+                lastStatusUpdate={lastStatusUpdate}
+                visitorIntents={visitorIntents}
+                packageAlerts={packageAlerts}
+                onUnlock={handleUnlock}
+                onLock={handleLock}
+                onViewIntentDetail={handleViewIntentDetail}
+                onViewAllAlerts={handleViewAllAlerts}
+              />
+            )}
+            {currentTab === "monitor" && (
+              <MonitorScreen
+                status={status}
+                deviceStatus={deviceStatus}
+                videoSrc={videoSrc}
+                stats={stats}
+                isTalking={isTalking}
+                onToggleTalk={handleToggleTalk}
+              />
+            )}
+            {currentTab === "settings" && (
+              <SettingsScreen
+                logs={logs}
+                status={status}
+                persons={persons}
+                visits={visits}
+                onClearLogs={clearLogs}
+                // 新增功能数据 (任务 17.1)
+                fingerprints={fingerprints}
+                nfcCards={nfcCards}
+                tempPasswords={tempPasswords}
+                // 新增回调函数 (任务 17.2)
+                onFingerprintAdd={(name) => {
+                  deviceService.sendUserMgmtCommand("finger", "add", 0, name);
+                }}
+                onFingerprintDelete={(id) => {
+                  deviceService.sendUserMgmtCommand("finger", "del", id);
+                }}
+                onNfcCardAdd={(name) => {
+                  deviceService.sendUserMgmtCommand("nfc", "add", 0, name);
+                }}
+                onNfcCardDelete={(id) => {
+                  deviceService.sendUserMgmtCommand("nfc", "del", id);
+                }}
+                onAdminPasswordModify={(currentPwd, newPwd) => {
+                  deviceService.sendUserMgmtCommand(
+                    "password",
+                    "set",
+                    0,
+                    newPwd,
+                  );
+                }}
+                onTempPasswordCreate={(name, type, options) => {
+                  // 生成随机6位密码
+                  const password = Math.floor(
+                    100000 + Math.random() * 900000,
+                  ).toString();
+                  // 计算有效期
+                  let expires = 24 * 60 * 60; // 默认24小时
+                  if (type === "time_limited" && options?.validUntil) {
+                    const validUntilDate = new Date(options.validUntil);
+                    expires = Math.floor(
+                      (validUntilDate.getTime() - Date.now()) / 1000,
+                    );
+                  } else if (type === "count_limited") {
+                    expires = 7 * 24 * 60 * 60; // 限次密码默认7天
+                  }
+                  deviceService.sendCommand({
+                    type: "lock_control",
+                    command: "temp_code",
+                    code: password,
+                    expires: expires,
+                    name: name,
+                    password_type: type,
+                    max_uses: options?.maxUses,
+                  });
+                }}
+                onTempPasswordDelete={(id) => {
+                  deviceService.sendUserMgmtCommand("password", "del", id);
+                }}
+                // 主题切换 (任务 2.3)
+                theme={theme}
+                onToggleTheme={toggleTheme}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -1066,6 +1393,27 @@ export default function App() {
         data={visitNotification}
         onClose={handleCloseVisitModal}
       />
+
+      {/* Toast通知队列 - 需求: 2.1, 2.2, 2.3, 2.4, 2.5 */}
+      {toastQueue.map((toast, index) => (
+        <div
+          key={toast.id}
+          style={{
+            position: "fixed",
+            top: `${16 + index * 72}px`, // 每个Toast间隔72px（高度+间距）
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 50,
+          }}
+        >
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            duration={toast.type === "error" ? 5000 : 3000}
+            onClose={() => removeToast(toast.id)}
+          />
+        </div>
+      ))}
     </div>
   );
 }

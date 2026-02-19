@@ -179,7 +179,7 @@ class LocalStorageService {
 
   // 数据库配置常量
   private readonly DB_NAME = "SmartDoorlockDB";
-  private readonly DB_VERSION = 2;
+  private readonly DB_VERSION = 3;
 
   // 数据库实例
   private db: IDBDatabase | null = null;
@@ -344,6 +344,13 @@ class LocalStorageService {
       // 创建新的对象存储
       this.createNewStoresForV2(db);
     }
+
+    // 版本 2 -> 版本 3 的升级
+    if (oldVersion < 3 && newVersion >= 3) {
+      // 从版本 2 升级到版本 3
+      // 创建访客意图和快递警报对象存储
+      this.createNewStoresForV3(db);
+    }
   }
 
   /**
@@ -451,6 +458,30 @@ class LocalStorageService {
     if (!db.objectStoreNames.contains("appSettings")) {
       db.createObjectStore("appSettings", { keyPath: "key" });
     }
+
+    // 12. visitor_intents - 访客意图记录（v2.5新增）
+    if (!db.objectStoreNames.contains("visitor_intents")) {
+      const visitorIntentsStore = db.createObjectStore("visitor_intents", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      visitorIntentsStore.createIndex("ts", "ts", { unique: false });
+      visitorIntentsStore.createIndex("intent_type", "intent_type", {
+        unique: false,
+      });
+    }
+
+    // 13. package_alerts - 快递警报记录（v2.5新增）
+    if (!db.objectStoreNames.contains("package_alerts")) {
+      const packageAlertsStore = db.createObjectStore("package_alerts", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      packageAlertsStore.createIndex("ts", "ts", { unique: false });
+      packageAlertsStore.createIndex("threat_level", "threat_level", {
+        unique: false,
+      });
+    }
   }
 
   /**
@@ -540,6 +571,41 @@ class LocalStorageService {
     // 11. appSettings - 应用设置
     if (!db.objectStoreNames.contains("appSettings")) {
       db.createObjectStore("appSettings", { keyPath: "key" });
+    }
+  }
+
+  /**
+   * 创建版本 3 的新对象存储
+   * 添加访客意图和快递警报功能
+   * @param db 数据库实例
+   */
+  private createNewStoresForV3(db: IDBDatabase): void {
+    console.log("从版本 2 升级到版本 3，添加访客意图和快递警报功能");
+
+    // 12. visitor_intents - 访客意图记录
+    if (!db.objectStoreNames.contains("visitor_intents")) {
+      const visitorIntentsStore = db.createObjectStore("visitor_intents", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      visitorIntentsStore.createIndex("ts", "ts", { unique: false });
+      visitorIntentsStore.createIndex("intent_type", "intent_type", {
+        unique: false,
+      });
+      console.log("创建 visitor_intents 对象存储");
+    }
+
+    // 13. package_alerts - 快递警报记录
+    if (!db.objectStoreNames.contains("package_alerts")) {
+      const packageAlertsStore = db.createObjectStore("package_alerts", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+      packageAlertsStore.createIndex("ts", "ts", { unique: false });
+      packageAlertsStore.createIndex("threat_level", "threat_level", {
+        unique: false,
+      });
+      console.log("创建 package_alerts 对象存储");
     }
   }
 
@@ -1022,15 +1088,30 @@ class LocalStorageService {
       try {
         const transaction = this.db!.transaction([storeName], "readwrite");
         const store = transaction.objectStore(storeName);
-        const index = store.index("timestamp");
+
+        // 根据不同的表使用不同的索引和时间字段
+        let indexName: string;
+        let useTimestamp: boolean; // true表示使用ISO字符串，false表示使用毫秒时间戳
+
+        if (storeName === "visitor_intents" || storeName === "package_alerts") {
+          indexName = "ts";
+          useTimestamp = false; // 使用毫秒时间戳
+        } else {
+          indexName = "timestamp";
+          useTimestamp = true; // 使用ISO字符串
+        }
+
+        const index = store.index(indexName);
 
         // 计算截止时间
         const cutoffTime = new Date();
         cutoffTime.setDate(cutoffTime.getDate() - maxAgeDays);
-        const cutoffTimestamp = cutoffTime.toISOString();
+        const cutoffValue = useTimestamp
+          ? cutoffTime.toISOString()
+          : cutoffTime.getTime();
 
         // 查询所有早于截止时间的记录（不包括恰好等于截止时间的记录）
-        const range = IDBKeyRange.upperBound(cutoffTimestamp, true);
+        const range = IDBKeyRange.upperBound(cutoffValue, true);
         const request = index.openCursor(range);
 
         let deletedCount = 0;
@@ -1092,7 +1173,17 @@ class LocalStorageService {
       try {
         const transaction = this.db!.transaction([storeName], "readwrite");
         const store = transaction.objectStore(storeName);
-        const index = store.index("timestamp");
+
+        // 根据不同的表使用不同的索引
+        let indexName: string;
+
+        if (storeName === "visitor_intents" || storeName === "package_alerts") {
+          indexName = "ts";
+        } else {
+          indexName = "timestamp";
+        }
+
+        const index = store.index(indexName);
 
         // 打开游标，按时间倒序遍历（最新的在前）
         const request = index.openCursor(null, "prev");
@@ -1180,11 +1271,33 @@ class LocalStorageService {
         50,
       );
 
+      // 清理访客意图：30天或1000条
+      const visitorIntentsAgeDeleted = await this.cleanupByAge(
+        "visitor_intents",
+        30,
+      );
+      const visitorIntentsCountDeleted = await this.cleanupByCount(
+        "visitor_intents",
+        1000,
+      );
+
+      // 清理快递警报：30天或1000条
+      const packageAlertsAgeDeleted = await this.cleanupByAge(
+        "package_alerts",
+        30,
+      );
+      const packageAlertsCountDeleted = await this.cleanupByCount(
+        "package_alerts",
+        1000,
+      );
+
       console.log("数据清理完成:", {
         unlockLogs: unlockLogsAgeDeleted + unlockLogsCountDeleted,
         eventLogs: eventLogsAgeDeleted + eventLogsCountDeleted,
         visitRecords: visitRecordsAgeDeleted + visitRecordsCountDeleted,
         recentActivities: recentActivitiesDeleted,
+        visitorIntents: visitorIntentsAgeDeleted + visitorIntentsCountDeleted,
+        packageAlerts: packageAlertsAgeDeleted + packageAlertsCountDeleted,
       });
     } catch (error) {
       console.error("数据清理失败:", error);
@@ -1494,6 +1607,194 @@ class LocalStorageService {
     } catch (error) {
       console.error("获取所有设置失败:", error);
       return {};
+    }
+  }
+
+  // ============================================
+  // 访客意图 CRUD 方法 (协议 v2.5)
+  // ============================================
+
+  /**
+   * 保存访客意图记录
+   * @param intent 访客意图对象
+   * @returns Promise<void>
+   * 需求: 12.1
+   */
+  public async saveVisitorIntent(intent: any): Promise<void> {
+    try {
+      await this.save("visitor_intents", intent);
+    } catch (error) {
+      console.error("保存访客意图失败:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取访客意图记录列表
+   * @param limit 限制返回数量，默认100条
+   * @returns Promise<any[]> 访客意图数组，按时间戳降序排列
+   * 需求: 12.2
+   */
+  public async getVisitorIntents(limit: number = 100): Promise<any[]> {
+    try {
+      if (!this.isInitialized) {
+        throw new Error("LocalStorageService 未初始化，请先调用 init()");
+      }
+
+      if (this.isFallbackMode) {
+        // 降级模式：从内存读取
+        const allIntents =
+          await this.fallbackStorage.getAll<any>("visitor_intents");
+        // 按时间戳降序排序并限制数量
+        return allIntents.sort((a, b) => b.ts - a.ts).slice(0, limit);
+      }
+
+      if (!this.db) {
+        throw new Error("数据库实例不可用");
+      }
+
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = this.db!.transaction(
+            ["visitor_intents"],
+            "readonly",
+          );
+          const store = transaction.objectStore("visitor_intents");
+          const index = store.index("ts");
+
+          // 使用索引按时间戳降序查询
+          const request = index.openCursor(null, "prev");
+          const results: any[] = [];
+
+          request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result;
+            if (cursor && results.length < limit) {
+              results.push(cursor.value);
+              cursor.continue();
+            } else {
+              resolve(results);
+            }
+          };
+
+          request.onerror = () => {
+            reject(request.error);
+          };
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      console.error("获取访客意图列表失败:", error);
+      return [];
+    }
+  }
+
+  /**
+   * 删除访客意图记录
+   * @param id 访客意图记录ID
+   * @returns Promise<void>
+   * 需求: 12.5
+   */
+  public async deleteVisitorIntent(id: number): Promise<void> {
+    try {
+      await this.delete("visitor_intents", id);
+    } catch (error) {
+      console.error("删除访客意图失败:", error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // 快递警报 CRUD 方法 (协议 v2.5)
+  // ============================================
+
+  /**
+   * 保存快递警报记录
+   * @param alert 快递警报对象
+   * @returns Promise<void>
+   * 需求: 13.1
+   */
+  public async savePackageAlert(alert: any): Promise<void> {
+    try {
+      await this.save("package_alerts", alert);
+    } catch (error) {
+      console.error("保存快递警报失败:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取快递警报记录列表
+   * @param limit 限制返回数量，默认100条
+   * @returns Promise<any[]> 快递警报数组，按时间戳降序排列
+   * 需求: 13.2
+   */
+  public async getPackageAlerts(limit: number = 100): Promise<any[]> {
+    try {
+      if (!this.isInitialized) {
+        throw new Error("LocalStorageService 未初始化，请先调用 init()");
+      }
+
+      if (this.isFallbackMode) {
+        // 降级模式：从内存读取
+        const allAlerts =
+          await this.fallbackStorage.getAll<any>("package_alerts");
+        // 按时间戳降序排序并限制数量
+        return allAlerts.sort((a, b) => b.ts - a.ts).slice(0, limit);
+      }
+
+      if (!this.db) {
+        throw new Error("数据库实例不可用");
+      }
+
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = this.db!.transaction(
+            ["package_alerts"],
+            "readonly",
+          );
+          const store = transaction.objectStore("package_alerts");
+          const index = store.index("ts");
+
+          // 使用索引按时间戳降序查询
+          const request = index.openCursor(null, "prev");
+          const results: any[] = [];
+
+          request.onsuccess = (event) => {
+            const cursor = (event.target as IDBRequest).result;
+            if (cursor && results.length < limit) {
+              results.push(cursor.value);
+              cursor.continue();
+            } else {
+              resolve(results);
+            }
+          };
+
+          request.onerror = () => {
+            reject(request.error);
+          };
+        } catch (error) {
+          reject(error);
+        }
+      });
+    } catch (error) {
+      console.error("获取快递警报列表失败:", error);
+      return [];
+    }
+  }
+
+  /**
+   * 删除快递警报记录
+   * @param id 快递警报记录ID
+   * @returns Promise<void>
+   * 需求: 13.5
+   */
+  public async deletePackageAlert(id: number): Promise<void> {
+    try {
+      await this.delete("package_alerts", id);
+    } catch (error) {
+      console.error("删除快递警报失败:", error);
+      throw error;
     }
   }
 }

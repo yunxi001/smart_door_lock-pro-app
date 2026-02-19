@@ -753,6 +753,9 @@ export class DeviceService {
       } else if (msg.type === "query_result") {
         // 处理查询结果
         this.handleQueryResult(msg);
+      } else if (msg.type === "visitor_intent_notification") {
+        // 处理访客意图通知
+        this.handleVisitorIntentNotification(msg);
       } else if (msg.type === "ack") {
         // 处理 ESP32 ack 响应
         this.handleAck(msg);
@@ -1771,6 +1774,109 @@ export class DeviceService {
   }
 
   /**
+   * 查询访客意图历史记录
+   * 协议 v2.5 新增
+   *
+   * @param params 查询参数
+   * @param params.start_date 开始日期 (ISO 8601格式)
+   * @param params.end_date 结束日期 (ISO 8601格式)
+   * @param params.limit 返回记录数量限制
+   * @param params.offset 偏移量
+   * @returns 命令序列号
+   */
+  public queryVisitorIntents(params: {
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }): string | null {
+    const data: Record<string, any> = {};
+
+    // 添加查询参数
+    if (params.start_date) {
+      data.start_date = params.start_date;
+    }
+    if (params.end_date) {
+      data.end_date = params.end_date;
+    }
+    if (params.limit !== undefined) {
+      data.limit = params.limit;
+    }
+    if (params.offset !== undefined) {
+      data.offset = params.offset;
+    }
+
+    // 发送查询命令
+    const seqId = this.sendCommand({
+      type: "query",
+      target: "visitor_intents",
+      data,
+    });
+
+    // 记录日志
+    this.emit("log", {
+      msg: `查询访客意图历史 (3秒超时，重传3次)`,
+      type: "info",
+    });
+
+    return seqId;
+  }
+
+  /**
+   * 查询快递警报历史记录
+   * 协议 v2.5 新增
+   *
+   * @param params 查询参数
+   * @param params.threat_level 威胁等级筛选
+   * @param params.start_date 开始日期 (ISO 8601格式)
+   * @param params.end_date 结束日期 (ISO 8601格式)
+   * @param params.limit 返回记录数量限制
+   * @param params.offset 偏移量
+   * @returns 命令序列号
+   */
+  public queryPackageAlerts(params: {
+    threat_level?: "low" | "medium" | "high";
+    start_date?: string;
+    end_date?: string;
+    limit?: number;
+    offset?: number;
+  }): string | null {
+    const data: Record<string, any> = {};
+
+    // 添加查询参数
+    if (params.threat_level) {
+      data.threat_level = params.threat_level;
+    }
+    if (params.start_date) {
+      data.start_date = params.start_date;
+    }
+    if (params.end_date) {
+      data.end_date = params.end_date;
+    }
+    if (params.limit !== undefined) {
+      data.limit = params.limit;
+    }
+    if (params.offset !== undefined) {
+      data.offset = params.offset;
+    }
+
+    // 发送查询命令
+    const seqId = this.sendCommand({
+      type: "query",
+      target: "package_alerts",
+      data,
+    });
+
+    // 记录日志
+    this.emit("log", {
+      msg: `查询快递警报历史 (3秒超时，重传3次)`,
+      type: "info",
+    });
+
+    return seqId;
+  }
+
+  /**
    * 处理查询结果
    * 解析 query_result 响应并触发对应事件
    *
@@ -1936,8 +2042,122 @@ export class DeviceService {
           type: "success",
         });
         break;
+      case "visitor_intents":
+        // 协议 v2.5 新增：访客意图历史查询
+        this.emit("visitor_intents_query_result", {
+          data: records,
+          total: total || 0,
+        });
+        this.emit("log", {
+          msg: `获取访客意图历史成功，共 ${records.length} 条`,
+          type: "success",
+        });
+        break;
+      case "package_alerts":
+        // 协议 v2.5 新增：快递警报历史查询
+        this.emit("package_alerts_query_result", {
+          data: records,
+          total: total || 0,
+        });
+        this.emit("log", {
+          msg: `获取快递警报历史成功，共 ${records.length} 条`,
+          type: "success",
+        });
+        break;
       default:
         this.emit("log", { msg: `查询结果: ${target}`, type: "info" });
+    }
+  }
+
+  /**
+   * 处理访客意图通知消息
+   * 协议 v2.5 新增：访客意图识别和快递看护警报
+   *
+   * 消息格式：
+   * {
+   *   type: "visitor_intent_notification",
+   *   visit_id: number,
+   *   session_id: string,
+   *   person_info: { person_id, name, relation_type },
+   *   intent_summary: { intent_type, summary, important_notes, ai_analysis },
+   *   dialogue_history: [{ role, content }],
+   *   package_check?: { threat_level, action, description },
+   *   ts: number
+   * }
+   */
+  private handleVisitorIntentNotification(msg: any) {
+    try {
+      // 验证必需字段
+      if (!msg.visit_id || !msg.session_id || !msg.intent_summary) {
+        throw new Error("访客意图消息缺少必需字段");
+      }
+
+      // 提取访客意图数据
+      const visitorIntent = {
+        visit_id: msg.visit_id,
+        session_id: msg.session_id,
+        person_info: msg.person_info || {},
+        intent_summary: msg.intent_summary,
+        dialogue_history: msg.dialogue_history || [],
+        package_check: msg.package_check,
+        ts: msg.ts || Date.now(),
+      };
+
+      // 触发访客意图事件
+      this.emit("visitor_intent", visitorIntent);
+
+      // 记录日志
+      const personName = msg.person_info?.name || "未知访客";
+      const intentType = msg.intent_summary?.intent_type || "other";
+      this.emit("log", {
+        msg: `收到访客意图通知: ${personName} - ${intentType}`,
+        type: "info",
+      });
+
+      // 如果包含 package_check 字段，提取快递警报数据
+      if (msg.package_check) {
+        const packageAlert = {
+          session_id: msg.session_id,
+          threat_level: msg.package_check.threat_level,
+          action: msg.package_check.action,
+          description: msg.package_check.description,
+          ts: msg.ts || Date.now(),
+        };
+
+        // 触发快递警报事件
+        this.emit("package_alert", packageAlert);
+
+        // 记录日志
+        const threatLevelText = this.getThreatLevelText(
+          msg.package_check.threat_level,
+        );
+        this.emit("log", {
+          msg: `快递警报: ${threatLevelText} - ${msg.package_check.description}`,
+          type: msg.package_check.threat_level === "high" ? "error" : "warning",
+        });
+      }
+    } catch (error) {
+      console.error("访客意图消息解析失败:", error);
+      this.emit("log", {
+        msg: "访客意图消息格式错误，已跳过",
+        type: "error",
+      });
+    }
+  }
+
+  /**
+   * 获取威胁等级的中文描述
+   */
+  private getThreatLevelText(level: string): string {
+    switch (level) {
+      case "low":
+        return "低威胁";
+      case "medium":
+        return "中威胁";
+      case "high":
+        return "高威胁";
+      default:
+        return "未知威胁";
     }
   }
 

@@ -12,17 +12,29 @@ import {
   User,
   Clock,
 } from "lucide-react";
-import { ConnectionStatus, DeviceStatus, Activity } from "../types";
+import {
+  ConnectionStatus,
+  DeviceStatus,
+  Activity,
+  VisitorIntent,
+  PackageAlert,
+} from "../types";
 import { deviceService } from "../services/DeviceService";
+import VisitorIntentCard from "../components/VisitorIntentCard";
+import PackageAlertCard from "../components/PackageAlertCard";
 
 interface HomeScreenProps {
   status: ConnectionStatus;
   deviceStatus: DeviceStatus | null;
   recentActivities: Activity[];
   lastStatusUpdate?: number | null; // 上次状态更新时间戳
+  visitorIntents: VisitorIntent[]; // 访客意图记录
+  packageAlerts: PackageAlert[]; // 快递警报记录
   onUnlock: () => void;
   onLock: () => void;
   onViewAllActivities?: () => void;
+  onViewIntentDetail: (intent: VisitorIntent) => void; // 查看访客意图详情
+  onViewAllAlerts: () => void; // 查看全部快递警报
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -30,9 +42,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   deviceStatus,
   recentActivities,
   lastStatusUpdate,
+  visitorIntents,
+  packageAlerts,
   onUnlock,
   onLock,
   onViewAllActivities,
+  onViewIntentDetail,
+  onViewAllAlerts,
 }) => {
   // 临时密码弹窗状态
   const [showTempCodeModal, setShowTempCodeModal] = useState(false);
@@ -314,7 +330,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
       {/* 最近动态列表 */}
       <div
-        className="bg-white border border-secondary-200 rounded-2xl p-4 shadow-sm
+        className="bg-white border border-secondary-200 rounded-2xl p-4 shadow-sm mb-4
                       dark:bg-secondary-900 dark:border-secondary-700"
       >
         <div className="flex items-center justify-between mb-3">
@@ -391,6 +407,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             })}
           </div>
         )}
+      </div>
+
+      {/* 访客意图卡片 */}
+      <div className="mb-4">
+        <VisitorIntentCard
+          intents={visitorIntents}
+          onViewDetail={onViewIntentDetail}
+        />
+      </div>
+
+      {/* 快递警报卡片 */}
+      <div className="mb-4">
+        <PackageAlertCard alerts={packageAlerts} onViewAll={onViewAllAlerts} />
       </div>
 
       {/* 临时密码弹窗 */}

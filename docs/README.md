@@ -4,14 +4,7 @@
 
 ### 协议规范
 
-- **[智能猫眼门锁系统-服务器与App通信协议规范-v2.4.md](./智能猫眼门锁系统-服务器与App通信协议规范-v2.4.md)** - 最新通信协议规范
-
-### 核心机制
-
-- **[消息ID机制与工作流程\_新版.md](./消息ID机制与工作流程_新版.md)** - 消息 ID 与序列号机制
-- **[命令分类与超时重传策略.md](./命令分类与超时重传策略.md)** - 命令分类与重传策略
-- **[超时重传策略更新说明.md](./超时重传策略更新说明.md)** - 重传策略详细说明
-- **[seq*id使用规范与注意事项*服务器端.md](./seq_id使用规范与注意事项_服务器端.md)** - 服务器端 seq_id 使用规范
+- **[智能猫眼门锁系统-服务器与App通信协议规范-v2.5.md](./智能猫眼门锁系统-服务器与App通信协议规范-v2.5.md)** - 当前使用的通信协议规范（v2.5）
 
 ### 构建与部署
 
@@ -21,43 +14,33 @@
 
 ### 项目文档
 
-- **[DOCUMENTATION.md](./DOCUMENTATION.md)** - 项目整体文档
+- **[DOCUMENTATION.md](./DOCUMENTATION.md)** - 项目整体技术文档
 
 ---
 
 ## 📦 归档文档
 
-### [archive/protocol-upgrade-v2.4/](./archive/protocol-upgrade-v2.4/)
+详见 **[archive/README.md](./archive/README.md)** 获取完整归档目录
 
-v2.3 到 v2.4 协议升级相关文档（已完成）
+### 主要归档分类
 
-- 协议升级计划-v2.3-to-v2.4.md
-- 协议升级完成报告-v2.4.md
-- 升级任务核查列表.md
-- 协议更新总结-v2.4.md
-
-### [archive/old-versions/](./archive/old-versions/)
-
-历史版本协议文档
-
-- 智能猫眼门锁系统-服务器与App通信协议规范-v2.2.md
-- 智能猫眼门锁系统-服务器与App通信协议规范-v2.3.md
-- 消息ID机制与工作流程.md（旧版）
-
-### [archive/troubleshooting/](./archive/troubleshooting/)
-
-问题排查与修复记录
-
-- 开锁记录查询问题排查.md
-- 修复总结-完整版.md
-- 测试修复完成报告.md
-- Gradle构建问题解决方案.md
+- **[protocol-upgrade-v2.4/](./archive/protocol-upgrade-v2.4/)** - v2.4 协议升级文档（已完成）
+- **[color-system/](./archive/color-system/)** - 色彩系统设计与迁移（已完成）
+- **[accessibility/](./archive/accessibility/)** - 无障碍测试报告（已完成）
+- **[optimization-reports/](./archive/optimization-reports/)** - 性能与构建优化报告（已完成）
+- **[old-versions/](./archive/old-versions/)** - 历史版本协议文档
+- **[troubleshooting/](./archive/troubleshooting/)** - 问题排查与修复记录（已解决）
 
 ---
 
 ## 📝 文档维护规范
 
-- **当前文档**：保持最新版本，定期更新
-- **归档文档**：历史版本、已完成任务、问题排查记录
+- **当前文档**：保持最新版本，定期更新，对项目开发有指导意义
+- **归档文档**：已完成任务、历史版本、过时文档存放在 `archive/` 目录
 - **命名规范**：使用中文，清晰描述文档内容
 - **版本管理**：协议文档使用版本号后缀（v2.x）
+- **归档时机**：功能完成、版本迭代、文档过时时及时归档
+
+## 📅 最近更新
+
+- 2026-02-19: 整理归档已完成的色彩系统、无障碍、优化报告、v2.4协议升级等文档
