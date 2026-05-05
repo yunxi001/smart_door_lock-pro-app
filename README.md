@@ -6,7 +6,14 @@
 
 智能门锁 Pro 是一款移动优先的 Web 应用，用于控制和监控智能猫眼门锁系统。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1QDTRxYj2_XU-pTXRu9JhAlM7bQ1ER0sg
+## 📚 文档导航
+
+- **[快速开始](#本地运行)** - 安装依赖、运行开发服务器
+- **[项目结构](#项目结构)** - 代码组织与架构说明
+- **[完整文档](docs/DOCUMENTATION.md)** - 详细的技术文档
+- **[协议规范](docs/智能猫眼门锁系统-服务器与App通信协议规范-v2.5.md)** - 通信协议详细说明
+- **[构建指南](docs/)** - Android 打包与 Capacitor 配置
+- **[归档文档](docs/archive/)** - 历史版本与已完成任务文档
 
 ## 核心功能
 
@@ -154,3 +161,14 @@ View your app in AI Studio: https://ai.studio/apps/drive/1QDTRxYj2_XU-pTXRu9JhAl
 - 需要支持 IndexedDB API
 - 需要支持 WebSocket
 - 音频功能需要 HTTPS 或 localhost 环境
+
+---
+
+## 📖 更多文档
+
+- **[完整技术文档](docs/DOCUMENTATION.md)** - 详细的架构设计、功能模块、测试覆盖
+- **[通信协议规范](docs/智能猫眼门锁系统-服务器与App通信协议规范-v2.5.md)** - WebSocket 协议详细说明
+- **[Android 构建指南](docs/Android构建快速指南.md)** - 移动端打包步骤
+- **[Capacitor 配置](docs/Capacitor移动端打包规范.md)** - 跨平台配置说明
+- **[文档索引](docs/README.md)** - 所有文档的完整目录
+- **[归档文档](docs/archive/)** - 历史版本与已完成任务
