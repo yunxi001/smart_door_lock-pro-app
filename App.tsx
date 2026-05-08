@@ -11,6 +11,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import VisitorIntentScreen from "./screens/VisitorIntentScreen";
 import PackageAlertScreen from "./screens/PackageAlertScreen";
 import { deviceService } from "./services/DeviceService";
+import { doorlockApiService } from "./services/DoorlockApiService";
 import {
   deviceStatusStorage,
   LocalDeviceStatus,
@@ -28,7 +29,6 @@ import {
   Fingerprint,
   NFCCard,
   TempPassword,
-  VideoAttachment,
   VisitorIntent,
   PackageAlert,
   SubScreen,
@@ -96,11 +96,8 @@ export default function App() {
   // 临时密码管理数据
   const [tempPasswords, setTempPasswords] = useState<TempPassword[]>([]);
 
-  // 视频附件数据 (预留用于全局视频附件状态管理)
-  // 注意: 当前 SettingsScreen 内部有独立的视频下载状态管理
-  const [videoAttachments, setVideoAttachments] = useState<VideoAttachment[]>(
-    [],
-  );
+  // HTTP API 认证 token (v6.0: hello 响应中获取)
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   // ============================================
   // v2.5 协议新增状态 - 访客意图和快递警报
@@ -303,32 +300,6 @@ export default function App() {
     initAndLoadCachedStatus();
   }, [currentDeviceId]);
 
-  /**
-   * 切换到首页时触发查询
-   * 需求: 18.1, 18.2, 18.3, 18.4, 18.5, 22.3
-   *
-   * 功能：
-   * 1. 当用户切换到首页且设备已连接时，查询最新数据
-   * 2. 实现查询错误处理和重试逻辑
-   */
-  useEffect(() => {
-    // 只在切换到首页且设备已连接时触发查询
-    if (currentTab === "home" && status === "connected") {
-      try {
-        // 查询最近5条访客意图
-        deviceService.queryVisitorIntents({ limit: 5 });
-
-        // 查询最近5条快递警报
-        deviceService.queryPackageAlerts({ limit: 5 });
-
-        console.log("已触发访客意图和快递警报查询");
-      } catch (error) {
-        console.error("触发查询失败:", error);
-        // 错误不中断应用，用户可以手动刷新
-      }
-    }
-  }, [currentTab, status]);
-
   useEffect(() => {
     // 订阅服务事件
     const unsubLog = deviceService.on("log", (_, data) => {
@@ -343,7 +314,17 @@ export default function App() {
       ]);
     });
 
-    const unsubStatus = deviceService.on("status", (_, s) => setStatus(s));
+    const unsubStatus = deviceService.on("status", (_, s) => {
+      setStatus(s);
+      // v6.0: 连接成功后同步 token 到 HTTP API 服务
+      if (s === "connected") {
+        const token = deviceService.getAuthToken();
+        if (token) {
+          doorlockApiService.setToken(token);
+          setAuthToken(token);
+        }
+      }
+    });
 
     const unsubStats = deviceService.on("stats", (_, s) => setStats(s));
 
@@ -358,76 +339,6 @@ export default function App() {
     const unsubTalk = deviceService.on("talkState", (_, state) =>
       setIsTalking(state),
     );
-
-    const unsubFace = deviceService.on("face_response", async (_, msg) => {
-      if (msg.status === "success") {
-        // 处理 get_persons 响应
-        if (msg.action === "get_persons") {
-          // 更新内存状态
-          setPersons(msg.data);
-
-          // 同步到本地存储（增量更新）
-          // 对比本地缓存和服务器数据，只更新有变化的部分
-          // 需求: 2.2, 2.3, 2.4
-          try {
-            await localStorageService.syncData("persons", msg.data, "id");
-            console.log("人脸数据已同步到本地存储");
-          } catch (error) {
-            console.error("同步人脸数据失败:", error);
-            // 错误不中断应用
-          }
-        }
-        // 处理 get_visits 响应
-        if (msg.action === "get_visits") {
-          setVisits(msg.data.records || []);
-        }
-        // 处理 register 响应 - 添加成功日志并重新查询
-        if (msg.action === "register") {
-          setLogs((prev: LogEntry[]) => [
-            ...prev.slice(-99),
-            {
-              id: Math.random().toString(36).substring(2, 11),
-              timestamp: new Date().toLocaleTimeString(),
-              message: `人脸注册成功: ${msg.data?.name || "新用户"}`,
-              type: "success",
-            },
-          ]);
-          // 重新查询人脸列表以同步到本地
-          deviceService.sendFaceManagement("get_persons");
-        }
-        // 处理 delete_person 响应 - 添加成功日志并重新查询
-        if (msg.action === "delete_person") {
-          setLogs((prev: LogEntry[]) => [
-            ...prev.slice(-99),
-            {
-              id: Math.random().toString(36).substring(2, 11),
-              timestamp: new Date().toLocaleTimeString(),
-              message: "人员删除成功",
-              type: "success",
-            },
-          ]);
-          // 重新查询人脸列表以同步到本地
-          deviceService.sendFaceManagement("get_persons");
-        }
-      } else {
-        // 处理失败响应
-        const actionText: Record<string, string> = {
-          get_persons: "获取人员列表",
-          register: "人脸注册",
-          delete_person: "删除人员",
-          get_visits: "获取到访记录",
-        };
-        setLogs((prev: LogEntry[]) => [
-          ...prev.slice(-99),
-          {
-            id: Math.random().toString(36).substring(2, 11),
-            timestamp: new Date().toLocaleTimeString(),
-            message: `${actionText[msg.action] || msg.action}失败: ${msg.message || "未知错误"}`,
-            type: "error",
-          },
-        ]);
-      }
-    });
 
     const unsubVisit = deviceService.on("visit", async (_, data) => {
       const name = data.person_name || "陌生人";
@@ -497,6 +408,21 @@ export default function App() {
       };
       setVisitNotification(notificationData);
       setShowVisitModal(true);
+
+      // v6.0: image_path 需要通过 HTTP API 下载为 Blob URL
+      if (data.image_path && !data.image) {
+        doorlockApiService
+          .downloadMediaByPath(data.image_path)
+          .then((blob) => {
+            const url = URL.createObjectURL(blob);
+            setVisitNotification((prev) =>
+              prev ? { ...prev, image: url } : null,
+            );
+          })
+          .catch((err) =>
+            console.error("下载到访图片失败:", err),
+          );
+      }
     });
 
     // 订阅设备状态上报
@@ -647,61 +573,6 @@ export default function App() {
         console.log("最近动态已保存到本地存储");
       } catch (error) {
         console.error("保存最近动态失败:", error);
-      }
-    });
-
-    // 订阅 server_ack 事件 - 处理服务器确认消息
-    const unsubServerAck = deviceService.on("server_ack", (_, msg) => {
-      const { code, msg: message } = msg;
-
-      // 根据 code 字段显示对应提示
-      switch (code) {
-        case 0:
-          // 成功 - 无需额外处理，DeviceService 已记录日志
-          break;
-        case 1:
-          // 设备离线 - 更新设备状态
-          setDeviceStatus((prev: DeviceStatus | null) =>
-            prev ? { ...prev, online: false } : null,
-          );
-          break;
-        case 2:
-          // 参数错误
-          setLogs((prev: LogEntry[]) => [
-            ...prev.slice(-99),
-            {
-              id: Math.random().toString(36).substring(2, 11),
-              timestamp: new Date().toLocaleTimeString(),
-              message: `参数错误: ${message}`,
-              type: "error",
-            },
-          ]);
-          break;
-        case 3:
-          // 未认证
-          setLogs((prev: LogEntry[]) => [
-            ...prev.slice(-99),
-            {
-              id: Math.random().toString(36).substring(2, 11),
-              timestamp: new Date().toLocaleTimeString(),
-              message: "未认证，请重新连接",
-              type: "error",
-            },
-          ]);
-          break;
-        case 4:
-          // 内部错误
-          setLogs((prev: LogEntry[]) => [
-            ...prev.slice(-99),
-            {
-              id: Math.random().toString(36).substring(2, 11),
-              timestamp: new Date().toLocaleTimeString(),
-              message: "服务器内部错误",
-              type: "error",
-            },
-          ]);
-          break;
-        // case 5: 重复消息 - 忽略
       }
     });
 
@@ -861,55 +732,6 @@ export default function App() {
       },
     );
 
-    // 订阅 media_download 事件 - 处理媒体下载结果
-    const unsubMediaDownload = deviceService.on("media_download", (_, data) => {
-      const { fileId, status, data: fileData, fileSize, error } = data;
-
-      if (status === "success" && fileData) {
-        // 下载成功，更新视频附件状态
-        setVideoAttachments((prev: VideoAttachment[]) =>
-          prev.map((attachment) =>
-            attachment.mediaId === fileId
-              ? {
-                  ...attachment,
-                  downloadStatus: "completed",
-                  downloadProgress: 100,
-                }
-              : attachment,
-          ),
-        );
-      } else if (status === "error") {
-        // 下载失败，更新状态
-        setVideoAttachments((prev: VideoAttachment[]) =>
-          prev.map((attachment) =>
-            attachment.mediaId === fileId
-              ? { ...attachment, downloadStatus: "failed" }
-              : attachment,
-          ),
-        );
-      }
-    });
-
-    // 订阅 media_download_progress 事件 - 处理下载进度
-    const unsubMediaProgress = deviceService.on(
-      "media_download_progress",
-      (_, data) => {
-        const { fileId, progress } = data;
-
-        setVideoAttachments((prev: VideoAttachment[]) =>
-          prev.map((attachment) =>
-            attachment.mediaId === fileId
-              ? {
-                  ...attachment,
-                  downloadStatus: "downloading",
-                  downloadProgress: progress,
-                }
-              : attachment,
-          ),
-        );
-      },
-    );
-
     // ============================================
     // v2.5 协议新增事件订阅 - 访客意图和快递警报
     // ============================================
@@ -998,92 +820,22 @@ export default function App() {
       },
     );
 
-    // 订阅访客意图查询结果事件
-    // 需求: 5.4, 10.4, 18.1, 18.2, 18.3, 18.4
-    const unsubVisitorIntentsQueryResult = deviceService.on(
-      "visitor_intents_query_result",
-      async (_, result) => {
-        try {
-          const records = result.data || [];
-
-          // 数据合并去重逻辑（按session_id去重）
-          setVisitorIntents((prev) => {
-            const existingSessionIds = new Set(
-              prev.map((item) => item.session_id),
-            );
-            const newRecords = records.filter(
-              (record: any) => !existingSessionIds.has(record.session_id),
-            );
-
-            // 合并新旧数据，保留最近100条
-            return [...newRecords, ...prev].slice(0, 100);
-          });
-
-          // 保存新记录到IndexedDB
-          for (const record of records) {
-            await localStorageService.saveVisitorIntent(record);
-          }
-
-          console.log(`访客意图查询结果已处理，共 ${records.length} 条`);
-        } catch (error) {
-          console.error("处理访客意图查询结果失败:", error);
-        }
-      },
-    );
-
-    // 订阅快递警报查询结果事件
-    // 需求: 5.4, 10.4, 18.1, 18.2, 18.3, 18.4
-    const unsubPackageAlertsQueryResult = deviceService.on(
-      "package_alerts_query_result",
-      async (_, result) => {
-        try {
-          const records = result.data || [];
-
-          // 数据合并去重逻辑（按ts去重）
-          setPackageAlerts((prev) => {
-            const existingTs = new Set(prev.map((item) => item.ts));
-            const newRecords = records.filter(
-              (record: any) => !existingTs.has(record.ts),
-            );
-
-            // 合并新旧数据，保留最近100条
-            return [...newRecords, ...prev].slice(0, 100);
-          });
-
-          // 保存新记录到IndexedDB
-          for (const record of records) {
-            await localStorageService.savePackageAlert(record);
-          }
-
-          console.log(`快递警报查询结果已处理，共 ${records.length} 条`);
-        } catch (error) {
-          console.error("处理快递警报查询结果失败:", error);
-        }
-      },
-    );
-
     return () => {
       unsubLog();
       unsubStatus();
       unsubStats();
       unsubFrame();
       unsubTalk();
-      unsubFace();
       unsubVisit();
       unsubStatusReport();
       unsubDeviceStatus();
       unsubEventReport();
       unsubLogReport();
-      unsubServerAck();
       unsubFingerResult();
       unsubNfcResult();
       unsubPasswordResult();
-      unsubMediaDownload();
-      unsubMediaProgress();
       unsubVisitorIntent();
       unsubPackageAlert();
-      unsubVisitorIntentsQueryResult();
-      unsubPackageAlertsQueryResult();
       deviceService.disconnect();
 
       // 清理 Tab 保存定时器
@@ -1101,21 +853,30 @@ export default function App() {
     }
   };
 
-  // 开锁操作
-  const handleUnlock = () => {
-    deviceService.sendCommand({
-      type: "lock_control",
-      command: "unlock",
-      duration: 5,
-    });
+  // 开锁操作 (v6.0: async/await)
+  const handleUnlock = async () => {
+    try {
+      await deviceService.sendCommand(
+        { type: "lock_control", command: "unlock", duration: 5 },
+        5000,
+        "ack",
+      );
+    } catch (e) {
+      // 错误已由 DeviceService 内部日志处理
+    }
   };
 
-  // 关锁操作
-  const handleLock = () => {
-    deviceService.sendCommand({
-      type: "lock_control",
-      command: "lock",
-    });
+  // 关锁操作 (v6.0: async/await)
+  const handleLock = async () => {
+    try {
+      await deviceService.sendCommand(
+        { type: "lock_control", command: "lock" },
+        5000,
+        "ack",
+      );
+    } catch (e) {
+      // 错误已由 DeviceService 内部日志处理
+    }
   };
 
   const clearLogs = () => setLogs([]);

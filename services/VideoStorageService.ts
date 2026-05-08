@@ -7,6 +7,7 @@
 
 import { VideoAttachment, VideoStorageStats, VideoDownloadStatus } from '../types';
 import { deviceService } from './DeviceService';
+import { doorlockApiService } from './DoorlockApiService';
 
 // IndexedDB 数据库配置
 const DB_NAME = 'SmartDoorlockVideoDB';
@@ -15,11 +16,6 @@ const STORE_NAME = 'videos';
 
 // 存储配置
 const DEFAULT_MAX_STORAGE_BYTES = 1024 * 1024 * 1024; // 1GB
-const DEFAULT_CHUNK_SIZE = 1048576; // 1MB
-
-// 下载重试配置
-const MAX_RETRY_COUNT = 3;
-const RETRY_DELAY_MS = 2000;
 
 // 事件回调类型
 type ProgressCallback = (recordId: number, progress: number) => void;
@@ -37,15 +33,6 @@ interface StoredVideo {
   thumbnailUrl?: string;
   data: ArrayBuffer;      // 视频二进制数据
   createdAt: number;      // 存储时间戳（用于 FIFO 清理）
-}
-
-// 下载任务接口
-interface DownloadTask {
-  attachment: VideoAttachment;
-  retryCount: number;
-  chunks: ArrayBuffer[];
-  totalChunks: number;
-  receivedChunks: number;
 }
 
 // 下载队列项接口（用于自动下载队列管理）
@@ -66,9 +53,9 @@ export class VideoStorageService {
   // 存储配置
   private maxStorageBytes: number = DEFAULT_MAX_STORAGE_BYTES;
   
-  // 下载队列
-  private downloadQueue: Map<number, DownloadTask> = new Map();
-  
+  // 下载状态标志 (v6.0: 简化，不再维护分片下载任务)
+  private isDownloading: boolean = false;
+
   // 自动下载队列（需求 14.8, 14.9）
   private autoDownloadQueue: QueuedDownload[] = [];
   private isAutoDownloading: boolean = false;
@@ -142,21 +129,9 @@ export class VideoStorageService {
   }
 
   /**
-   * 订阅 DeviceService 的媒体下载事件
+   * 订阅 DeviceService 事件 (v6.0: media_download/media_download_chunk 已迁移到 HTTP API)
    */
   private subscribeToDeviceEvents(): void {
-    // 订阅完整文件下载响应
-    const unsubDownload = deviceService.on('media_download', (_, data) => {
-      this.handleMediaDownloadResponse(data);
-    });
-    this.unsubscribers.push(unsubDownload);
-
-    // 订阅分片下载响应
-    const unsubChunk = deviceService.on('media_download_chunk', (_, data) => {
-      this.handleMediaDownloadChunkResponse(data);
-    });
-    this.unsubscribers.push(unsubChunk);
-
     // 订阅监控状态变化（需求 14.9）
     const unsubSystem = deviceService.on('log', (_, data) => {
       this.handleSystemLogForMonitorState(data);
@@ -211,120 +186,7 @@ export class VideoStorageService {
   }
 
   /**
-   * 处理完整文件下载响应
-   */
-  private async handleMediaDownloadResponse(data: {
-    fileId: number;
-    status: 'success' | 'error';
-    data?: string;
-    fileSize?: number;
-    fileType?: string;
-    error?: string;
-  }): Promise<void> {
-    const task = this.findTaskByMediaId(data.fileId);
-    if (!task) return;
-
-    if (data.status === 'success' && data.data) {
-      try {
-        // 解码 Base64 数据
-        const binaryData = this.base64ToArrayBuffer(data.data);
-        
-        // 保存到 IndexedDB
-        await this.saveVideoToStorage(task.attachment, binaryData);
-        
-        // 触发完成回调
-        this.emitComplete(task.attachment.recordId);
-        
-        // 从队列中移除
-        this.downloadQueue.delete(task.attachment.recordId);
-        
-        // 处理下一个自动下载任务
-        if (this.isAutoDownloading) {
-          await this.processNextAutoDownload();
-        }
-        
-      } catch (error) {
-        this.handleDownloadError(task, error as Error);
-      }
-    } else {
-      this.handleDownloadError(task, new Error(data.error || '下载失败'));
-    }
-  }
-
-  /**
-   * 处理分片下载响应
-   */
-  private async handleMediaDownloadChunkResponse(data: {
-    fileId: number;
-    chunkIndex: number;
-    status: 'success' | 'error';
-    data?: string;
-    chunkSize?: number;
-    totalChunks?: number;
-    isLast?: boolean;
-    error?: string;
-  }): Promise<void> {
-    const task = this.findTaskByMediaId(data.fileId);
-    if (!task) return;
-
-    if (data.status === 'success' && data.data) {
-      try {
-        // 解码 Base64 分片数据
-        const chunkData = this.base64ToArrayBuffer(data.data);
-        
-        // 存储分片
-        task.chunks[data.chunkIndex] = chunkData;
-        task.receivedChunks++;
-        
-        // 更新总分片数
-        if (data.totalChunks) {
-          task.totalChunks = data.totalChunks;
-        }
-        
-        // 计算并触发进度回调
-        const progress = task.totalChunks > 0 
-          ? Math.round((task.receivedChunks / task.totalChunks) * 100)
-          : 0;
-        this.emitProgress(task.attachment.recordId, progress);
-        
-        // 检查是否完成
-        if (data.isLast || task.receivedChunks >= task.totalChunks) {
-          // 合并所有分片
-          const fullData = this.mergeChunks(task.chunks);
-          
-          // 保存到 IndexedDB
-          await this.saveVideoToStorage(task.attachment, fullData);
-          
-          // 触发完成回调
-          this.emitComplete(task.attachment.recordId);
-          
-          // 从队列中移除
-          this.downloadQueue.delete(task.attachment.recordId);
-          
-          // 处理下一个自动下载任务
-          if (this.isAutoDownloading) {
-            await this.processNextAutoDownload();
-          }
-        } else {
-          // 请求下一个分片
-          deviceService.sendMediaDownloadChunk(
-            task.attachment.mediaId,
-            data.chunkIndex + 1,
-            DEFAULT_CHUNK_SIZE
-          );
-        }
-        
-      } catch (error) {
-        this.handleDownloadError(task, error as Error);
-      }
-    } else {
-      this.handleDownloadError(task, new Error(data.error || '分片下载失败'));
-    }
-  }
-
-
-  /**
-   * 下载视频
+   * 下载视频 (v6.0: 使用 HTTP API，不再通过 WebSocket 分片下载)
    * 需求: 15.4, 15.5
    * @param attachment 视频附件信息
    */
@@ -333,9 +195,9 @@ export class VideoStorageService {
       await this.initialize();
     }
 
-    // 检查是否已在下载队列中
-    if (this.downloadQueue.has(attachment.recordId)) {
-      console.log(`视频 ${attachment.recordId} 已在下载队列中`);
+    // 检查是否正在下载
+    if (this.isDownloading) {
+      console.log(`视频 ${attachment.recordId} 等待当前下载完成`);
       return;
     }
 
@@ -350,10 +212,7 @@ export class VideoStorageService {
     // 检查存储空间
     const stats = await this.getStorageStats();
     if (stats.usedBytes + attachment.fileSize > this.maxStorageBytes) {
-      // 尝试清理旧视频
       await this.cleanupOldVideos();
-      
-      // 再次检查
       const newStats = await this.getStorageStats();
       if (newStats.usedBytes + attachment.fileSize > this.maxStorageBytes) {
         this.emitError(attachment.recordId, new Error('存储空间不足'));
@@ -361,59 +220,21 @@ export class VideoStorageService {
       }
     }
 
-    // 创建下载任务
-    const task: DownloadTask = {
-      attachment,
-      retryCount: 0,
-      chunks: [],
-      totalChunks: 0,
-      receivedChunks: 0
-    };
-
-    this.downloadQueue.set(attachment.recordId, task);
-    
-    // 触发进度回调（0%）
+    this.isDownloading = true;
     this.emitProgress(attachment.recordId, 0);
 
-    // 根据文件大小决定下载方式
-    if (attachment.fileSize > DEFAULT_CHUNK_SIZE) {
-      // 大文件使用分片下载
-      deviceService.sendMediaDownloadChunk(attachment.mediaId, 0, DEFAULT_CHUNK_SIZE);
-    } else {
-      // 小文件直接下载
-      deviceService.sendMediaDownload(attachment.mediaId);
-    }
-  }
+    try {
+      // v6.0: 使用 HTTP API 下载媒体文件（返回 Blob，无需 Base64 解码和分片合并）
+      const blob = await doorlockApiService.downloadMedia(attachment.mediaId);
+      const arrayBuffer = await blob.arrayBuffer();
 
-  /**
-   * 处理下载错误，支持重试
-   * 需求: 15.5
-   */
-  private async handleDownloadError(task: DownloadTask, error: Error): Promise<void> {
-    task.retryCount++;
-    
-    if (task.retryCount < MAX_RETRY_COUNT) {
-      console.log(`视频 ${task.attachment.recordId} 下载失败，${RETRY_DELAY_MS}ms 后重试 (${task.retryCount}/${MAX_RETRY_COUNT})`);
-      
-      // 延迟后重试
-      setTimeout(() => {
-        // 重置分片状态
-        task.chunks = [];
-        task.receivedChunks = 0;
-        
-        // 重新开始下载
-        if (task.attachment.fileSize > DEFAULT_CHUNK_SIZE) {
-          deviceService.sendMediaDownloadChunk(task.attachment.mediaId, 0, DEFAULT_CHUNK_SIZE);
-        } else {
-          deviceService.sendMediaDownload(task.attachment.mediaId);
-        }
-      }, RETRY_DELAY_MS);
-    } else {
-      // 超过重试次数，触发错误回调
-      console.error(`视频 ${task.attachment.recordId} 下载失败，已达最大重试次数`);
-      this.emitError(task.attachment.recordId, error);
-      this.downloadQueue.delete(task.attachment.recordId);
-      
+      await this.saveVideoToStorage(attachment, arrayBuffer);
+      this.emitProgress(attachment.recordId, 100);
+      this.emitComplete(attachment.recordId);
+    } catch (error) {
+      this.emitError(attachment.recordId, error as Error);
+    } finally {
+      this.isDownloading = false;
       // 处理下一个自动下载任务
       if (this.isAutoDownloading) {
         await this.processNextAutoDownload();
@@ -644,26 +465,16 @@ export class VideoStorageService {
   }
 
   /**
-   * 获取视频下载状态
+   * 获取视频下载状态 (v6.0: 简化为 pending/completed 两种状态)
    */
-  public getDownloadStatus(recordId: number): VideoDownloadStatus {
-    const task = this.downloadQueue.get(recordId);
-    if (task) {
-      return 'downloading';
-    }
-    return 'pending';
+  public getDownloadStatus(_recordId: number): VideoDownloadStatus {
+    return this.isDownloading ? 'downloading' : 'pending';
   }
 
   /**
-   * 获取下载进度
+   * 获取下载进度 (v6.0: HTTP 下载不跟踪精确进度，由 progress/complete 回调驱动)
    */
-  public getDownloadProgress(recordId: number): number {
-    const task = this.downloadQueue.get(recordId);
-    if (!task) return 0;
-    
-    if (task.totalChunks > 0) {
-      return Math.round((task.receivedChunks / task.totalChunks) * 100);
-    }
+  public getDownloadProgress(_recordId: number): number {
     return 0;
   }
 
@@ -714,54 +525,6 @@ export class VideoStorageService {
     this.errorCallbacks.forEach(cb => cb(recordId, error));
   }
 
-  // ============================================
-  // 工具方法
-  // ============================================
-
-  /**
-   * 根据 mediaId 查找下载任务
-   */
-  private findTaskByMediaId(mediaId: number): DownloadTask | undefined {
-    for (const task of this.downloadQueue.values()) {
-      if (task.attachment.mediaId === mediaId) {
-        return task;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Base64 转 ArrayBuffer
-   */
-  private base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-  }
-
-  /**
-   * 合并分片数据
-   * 注意: 合并后会清空原始分片数组以释放内存
-   */
-  private mergeChunks(chunks: ArrayBuffer[]): ArrayBuffer {
-    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-    const result = new Uint8Array(totalLength);
-    
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(new Uint8Array(chunk), offset);
-      offset += chunk.byteLength;
-    }
-    
-    // 清空分片数组以释放内存
-    chunks.length = 0;
-    
-    return result.buffer;
-  }
-
   /**
    * 格式化文件大小
    */
@@ -789,12 +552,6 @@ export class VideoStorageService {
     );
     if (existsInQueue) {
       console.log(`视频 ${attachment.recordId} 已在自动下载队列中`);
-      return;
-    }
-
-    // 检查是否正在下载
-    if (this.downloadQueue.has(attachment.recordId)) {
-      console.log(`视频 ${attachment.recordId} 正在下载中`);
       return;
     }
 
@@ -868,20 +625,11 @@ export class VideoStorageService {
     isMonitoring: boolean;
     currentDownload: VideoAttachment | null;
   } {
-    // 获取当前正在下载的项（如果有）
-    let currentDownload: VideoAttachment | null = null;
-    if (this.downloadQueue.size > 0) {
-      const firstTask = this.downloadQueue.values().next().value;
-      if (firstTask) {
-        currentDownload = firstTask.attachment;
-      }
-    }
-
     return {
       queueLength: this.autoDownloadQueue.length,
       isDownloading: this.isAutoDownloading,
       isMonitoring: this.isMonitoringActive,
-      currentDownload
+      currentDownload: null,
     };
   }
 
@@ -941,8 +689,7 @@ export class VideoStorageService {
     }
 
     // 检查是否有正在进行的下载
-    if (this.downloadQueue.size > 0) {
-      // 等待当前下载完成后再处理下一个
+    if (this.isDownloading) {
       return;
     }
 
@@ -1004,7 +751,7 @@ export class VideoStorageService {
     }
     
     this.isInitialized = false;
-    this.downloadQueue.clear();
+    this.isDownloading = false;
     
     // 清理自动下载状态
     this.autoDownloadQueue = [];

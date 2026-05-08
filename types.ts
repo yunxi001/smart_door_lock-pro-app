@@ -212,29 +212,6 @@ export interface VideoStorageStats {
 }
 
 // ============================================
-// 消息确认机制类型 (ID 机制)
-// ============================================
-
-// 等待中的命令接口
-export interface PendingCommand {
-  seqId: string; // 消息序列号
-  command: object; // 原始命令对象
-  sentAt: number; // 发送时间戳
-  retryCount: number; // 重试次数
-  timeoutId?: number; // 超时计时器 ID
-  onSuccess?: () => void; // 成功回调
-  onError?: (error: string) => void; // 失败回调
-}
-
-// sendCommand 可选参数接口
-export interface CommandOptions {
-  onSuccess?: () => void; // 命令执行成功回调
-  onError?: (error: string) => void; // 命令执行失败回调
-  timeout?: number; // 超时时间（毫秒），默认 3000
-  maxRetries?: number; // 最大重试次数，默认 3
-}
-
-// ============================================
 // 本地存储数据类型定义 (需求 11.1)
 // ============================================
 

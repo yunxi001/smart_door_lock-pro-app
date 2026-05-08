@@ -44,6 +44,7 @@ import {
 import { deviceService } from "../services/DeviceService";
 import { videoStorageService } from "../services/VideoStorageService";
 import { localStorageService } from "../services/LocalStorageService";
+import { doorlockApiService } from "../services/DoorlockApiService";
 
 interface Props {
   logs: LogEntry[];
@@ -173,6 +174,16 @@ const eventTypeMap: Record<string, { label: string; color: string }> = {
   },
 };
 
+// data URL → File 对象（用于 FormData 上传）
+function dataURLtoFile(dataUrl: string, filename: string): File {
+  const arr = dataUrl.split(",");
+  const mime = arr[0].match(/:(.*?);/)?.[1] || "image/jpeg";
+  const bstr = atob(arr[1]);
+  const u8arr = new Uint8Array(bstr.length);
+  for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
+  return new File([u8arr], filename, { type: mime });
+}
+
 // 人脸管理子标签类型
 type FaceSubTab = "list" | "register";
 
@@ -180,7 +191,7 @@ export const SettingsScreen: React.FC<Props> = ({
   logs,
   status,
   persons,
-  visits,
+  visits: visitsProp,
   onClearLogs,
   // 新增功能数据 (任务 17.1)
   fingerprints: propFingerprints,
@@ -211,7 +222,8 @@ export const SettingsScreen: React.FC<Props> = ({
   const [timeEnd, setTimeEnd] = useState("22:00");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 到访记录分页状态
+  // 到访记录状态 (v6.0: HTTP API 返回的数据直接更新本地状态)
+  const [visits, setVisits] = useState<VisitRecord[]>(visitsProp);
   const [visitPage, setVisitPage] = useState(1);
   const [visitLoading, setVisitLoading] = useState(false);
   const [hasMoreVisits, setHasMoreVisits] = useState(true);
@@ -339,68 +351,8 @@ export const SettingsScreen: React.FC<Props> = ({
     }
   }, [propTempPasswords]);
 
-  // 监听人脸管理响应，自动刷新列表
+  // v6.0: face_response / unlock_logs_result / events_result 已迁移到 HTTP API
   useEffect(() => {
-    const unsubFaceResponse = deviceService.on("face_response", (type, msg) => {
-      // 注册或删除成功后，刷新人员列表
-      if (
-        msg.status === "success" &&
-        (msg.action === "register" || msg.action === "delete_person")
-      ) {
-        deviceService.sendCommand({
-          type: "face_management",
-          action: "get_persons",
-        });
-      }
-      // 获取到访记录响应后，更新加载状态
-      if (msg.action === "get_visits") {
-        setVisitLoading(false);
-        // 如果返回的数据少于 PAGE_SIZE，说明没有更多数据
-        if (msg.data && msg.data.length < PAGE_SIZE) {
-          setHasMoreVisits(false);
-        }
-      }
-    });
-
-    // 监听开锁记录查询结果
-    const unsubUnlockLogs = deviceService.on(
-      "unlock_logs_result",
-      (type, result) => {
-        setUnlockLogsLoading(false);
-        const { data, total } = result;
-        setUnlockLogsTotal(total);
-
-        if (unlockLogsPage === 1) {
-          setUnlockLogs(data);
-        } else {
-          setUnlockLogs((prev) => [...prev, ...data]);
-        }
-
-        // 如果返回的数据少于 PAGE_SIZE，说明没有更多数据
-        if (data.length < PAGE_SIZE) {
-          setHasMoreUnlockLogs(false);
-        }
-      },
-    );
-
-    // 监听事件记录查询结果
-    const unsubEventLogs = deviceService.on("events_result", (type, result) => {
-      setEventLogsLoading(false);
-      const { data, total } = result;
-      setEventLogsTotal(total);
-
-      if (eventLogsPage === 1) {
-        setEventLogs(data);
-      } else {
-        setEventLogs((prev) => [...prev, ...data]);
-      }
-
-      // 如果返回的数据少于 PAGE_SIZE，说明没有更多数据
-      if (data.length < PAGE_SIZE) {
-        setHasMoreEventLogs(false);
-      }
-    });
-
     // 监听指纹管理结果
     const unsubFingerResult = deviceService.on(
       "finger_result",
@@ -706,9 +658,6 @@ export const SettingsScreen: React.FC<Props> = ({
     );
 
     return () => {
-      unsubFaceResponse();
-      unsubUnlockLogs();
-      unsubEventLogs();
       unsubFingerResult();
       unsubFingerProgress();
       unsubFingerError();
@@ -747,23 +696,28 @@ export const SettingsScreen: React.FC<Props> = ({
   // 导航到子页面
   const handleNavigate = async (screen: SubScreen) => {
     setSubScreen(screen);
-    // 进入人脸管理时，获取人员列表
+    // 进入人脸管理时，通过 HTTP API 获取人员列表
     if (screen === "face-management" && isConnected) {
-      deviceService.sendCommand({
-        type: "face_management",
-        action: "get_persons",
-      });
+      doorlockApiService.getPersons().catch((e) =>
+        console.error("获取人员列表失败:", e),
+      );
     }
-    // 进入到访记录时，重置分页状态并获取第一页数据
+    // 进入到访记录时，重置分页状态并通过 HTTP API 获取第一页数据
     if (screen === "visit-records" && isConnected) {
       setVisitPage(1);
       setHasMoreVisits(true);
       setVisitLoading(true);
-      deviceService.sendCommand({
-        type: "face_management",
-        action: "get_visits",
-        data: { page: 1, page_size: PAGE_SIZE },
-      });
+      doorlockApiService
+        .getVisits({ limit: PAGE_SIZE, offset: 0 })
+        .then(({ visits: data, total }) => {
+          setVisits(data); // 直接更新本地 visits 列表
+          setVisitLoading(false);
+          if (data.length < PAGE_SIZE) setHasMoreVisits(false);
+        })
+        .catch((e) => {
+          console.error("获取到访记录失败:", e);
+          setVisitLoading(false);
+        });
     }
     // 进入开锁记录时，重置分页状态并获取数据
     if (screen === "unlock-logs") {
@@ -773,12 +727,19 @@ export const SettingsScreen: React.FC<Props> = ({
       setUnlockLogs([]);
 
       if (isConnected) {
-        // 在线模式：从服务器获取
-        deviceService.sendCommand({
-          type: "query",
-          target: "unlock_logs",
-          data: { limit: PAGE_SIZE, offset: 0 },
-        });
+        // 在线模式：通过 HTTP API 从服务器获取
+        doorlockApiService
+          .getUnlockLogs({ deviceId, limit: PAGE_SIZE, offset: 0 })
+          .then(({ logs: data, total }) => {
+            setUnlockLogs(data);
+            setUnlockLogsTotal(total);
+            setUnlockLogsLoading(false);
+            if (data.length < PAGE_SIZE) setHasMoreUnlockLogs(false);
+          })
+          .catch((e) => {
+            console.error("获取开锁记录失败:", e);
+            setUnlockLogsLoading(false);
+          });
       } else {
         // 离线模式：从本地存储加载开锁记录
         //
@@ -817,12 +778,19 @@ export const SettingsScreen: React.FC<Props> = ({
       setEventLogs([]);
 
       if (isConnected) {
-        // 在线模式：从服务器获取
-        deviceService.sendCommand({
-          type: "query",
-          target: "events",
-          data: { limit: PAGE_SIZE, offset: 0 },
-        });
+        // 在线模式：通过 HTTP API 从服务器获取
+        doorlockApiService
+          .getEvents({ deviceId, limit: PAGE_SIZE, offset: 0 })
+          .then(({ events: data, total }) => {
+            setEventLogs(data);
+            setEventLogsTotal(total);
+            setEventLogsLoading(false);
+            if (data.length < PAGE_SIZE) setHasMoreEventLogs(false);
+          })
+          .catch((e) => {
+            console.error("获取事件记录失败:", e);
+            setEventLogsLoading(false);
+          });
       } else {
         // 离线模式：从本地存储加载事件记录
         //
@@ -868,56 +836,78 @@ export const SettingsScreen: React.FC<Props> = ({
     }
   };
 
-  // 到访记录 - 加载更多
+  // 到访记录 - 加载更多 (v6.0: HTTP API)
   const handleLoadMoreVisits = () => {
     if (visitLoading || !hasMoreVisits || !isConnected) return;
 
     const nextPage = visitPage + 1;
     setVisitPage(nextPage);
     setVisitLoading(true);
-    deviceService.sendCommand({
-      type: "face_management",
-      action: "get_visits",
-      data: { page: nextPage, page_size: PAGE_SIZE },
-    });
+    doorlockApiService
+      .getVisits({ limit: PAGE_SIZE, offset: (nextPage - 1) * PAGE_SIZE })
+      .then(({ visits: data }) => {
+        setVisits((prev) => [...prev, ...data]);
+        setVisitLoading(false);
+        if (data.length < PAGE_SIZE) setHasMoreVisits(false);
+      })
+      .catch((e) => {
+        console.error("加载更多到访记录失败:", e);
+        setVisitLoading(false);
+      });
   };
 
-  // 开锁记录 - 加载更多
+  // 开锁记录 - 加载更多 (v6.0: HTTP API)
   const handleLoadMoreUnlockLogs = () => {
     if (unlockLogsLoading || !hasMoreUnlockLogs || !isConnected) return;
 
     const nextPage = unlockLogsPage + 1;
     setUnlockLogsPage(nextPage);
     setUnlockLogsLoading(true);
-    deviceService.sendCommand({
-      type: "query",
-      target: "unlock_logs",
-      data: { limit: PAGE_SIZE, offset: (nextPage - 1) * PAGE_SIZE },
-    });
+    doorlockApiService
+      .getUnlockLogs({ deviceId, limit: PAGE_SIZE, offset: (nextPage - 1) * PAGE_SIZE })
+      .then(({ logs: data }) => {
+        setUnlockLogs((prev) => [...prev, ...data]);
+        setUnlockLogsLoading(false);
+        if (data.length < PAGE_SIZE) setHasMoreUnlockLogs(false);
+      })
+      .catch((e) => {
+        console.error("加载更多开锁记录失败:", e);
+        setUnlockLogsLoading(false);
+      });
   };
 
-  // 事件记录 - 加载更多
+  // 事件记录 - 加载更多 (v6.0: HTTP API)
   const handleLoadMoreEventLogs = () => {
     if (eventLogsLoading || !hasMoreEventLogs || !isConnected) return;
 
     const nextPage = eventLogsPage + 1;
     setEventLogsPage(nextPage);
     setEventLogsLoading(true);
-    deviceService.sendCommand({
-      type: "query",
-      target: "events",
-      data: { limit: PAGE_SIZE, offset: (nextPage - 1) * PAGE_SIZE },
-    });
+    doorlockApiService
+      .getEvents({ deviceId, limit: PAGE_SIZE, offset: (nextPage - 1) * PAGE_SIZE })
+      .then(({ events: data }) => {
+        setEventLogs((prev) => [...prev, ...data]);
+        setEventLogsLoading(false);
+        if (data.length < PAGE_SIZE) setHasMoreEventLogs(false);
+      })
+      .catch((e) => {
+        console.error("加载更多事件记录失败:", e);
+        setEventLogsLoading(false);
+      });
   };
 
-  // 人脸管理 - 删除人员
-  const handleDeletePerson = (id: number) => {
+  // 人脸管理 - 删除人员 (v6.0: HTTP API)
+  const handleDeletePerson = async (id: number) => {
     if (confirm("确定要删除此人员吗？")) {
-      deviceService.sendCommand({
-        type: "face_management",
-        action: "delete_person",
-        data: { person_id: id },
-      });
+      try {
+        await doorlockApiService.deletePerson(id);
+        // 刷新人员列表
+        doorlockApiService.getPersons().catch((e) =>
+          console.error("刷新人员列表失败:", e),
+        );
+      } catch (e: any) {
+        alert(`删除失败: ${e.message}`);
+      }
     }
   };
 
@@ -942,8 +932,8 @@ export const SettingsScreen: React.FC<Props> = ({
     setShowPermissionModal(true);
   };
 
-  // 人脸管理 - 保存权限更新
-  const handleSavePermission = () => {
+  // 人脸管理 - 保存权限更新 (v6.0: HTTP API)
+  const handleSavePermission = async () => {
     if (!editingPerson) return;
 
     setPermissionSaving(true);
@@ -955,7 +945,6 @@ export const SettingsScreen: React.FC<Props> = ({
       time_end: permissionTimeEnd,
     };
 
-    // 根据权限类型添加额外字段
     if (permissionType === "temporary") {
       permissionData.valid_from = permissionValidFrom;
       permissionData.valid_until = permissionValidUntil;
@@ -963,27 +952,19 @@ export const SettingsScreen: React.FC<Props> = ({
       permissionData.remaining_count = permissionRemainingCount;
     }
 
-    // 发送更新权限命令
-    deviceService.sendCommand({
-      type: "face_management",
-      action: "update_permission",
-      data: {
-        person_id: editingPerson.id,
-        permission: permissionData,
-      },
-    });
-
-    // 模拟保存完成（实际应该监听响应）
-    setTimeout(() => {
+    try {
+      await doorlockApiService.updatePermission(editingPerson.id, permissionData);
+      // 刷新人员列表
+      doorlockApiService.getPersons().catch((e) =>
+        console.error("刷新人员列表失败:", e),
+      );
+    } catch (e: any) {
+      alert(`权限更新失败: ${e.message}`);
+    } finally {
       setPermissionSaving(false);
       setShowPermissionModal(false);
       setEditingPerson(null);
-      // 刷新人员列表
-      deviceService.sendCommand({
-        type: "face_management",
-        action: "get_persons",
-      });
-    }, 500);
+    }
   };
 
   // 人脸管理 - 选择图片
@@ -998,36 +979,35 @@ export const SettingsScreen: React.FC<Props> = ({
     }
   };
 
-  // 人脸管理 - 注册人员
-  const handleRegister = () => {
+  // 人脸管理 - 注册人员 (v6.0: HTTP API multipart/form-data)
+  const handleRegister = async () => {
     if (!name || !imgPreview) {
       alert("请填写姓名并上传照片");
       return;
     }
 
-    // 提取 base64 数据
-    const base64 = imgPreview.split(",")[1];
+    try {
+      // 将 base64 data URL 转回 File 对象
+      const file = dataURLtoFile(imgPreview, `${name}.jpg`);
 
-    deviceService.sendCommand({
-      type: "face_management",
-      action: "register",
-      data: {
+      await doorlockApiService.registerFace({
         name,
         relation_type: relation,
-        images: [base64],
-        permission: {
-          type: "permanent",
-          time_start: timeStart,
-          time_end: timeEnd,
-          day_type: "daily",
-        },
-      },
-    });
+        images: [file],
+      });
 
-    // 重置表单并切换回列表
-    setName("");
-    setImgPreview(null);
-    setFaceSubTab("list");
+      // 刷新人员列表
+      doorlockApiService.getPersons().catch((e) =>
+        console.error("刷新人员列表失败:", e),
+      );
+
+      // 重置表单并切换回列表
+      setName("");
+      setImgPreview(null);
+      setFaceSubTab("list");
+    } catch (e: any) {
+      alert(`注册失败: ${e.message}`);
+    }
   };
 
   // 指纹管理 - 删除指纹 (任务 17.2 - 使用回调函数)
@@ -1168,14 +1148,13 @@ export const SettingsScreen: React.FC<Props> = ({
   };
 
   // 密码管理 - 创建临时密码 (任务 17.2 - 使用回调函数)
-  const handleCreateTempPassword = () => {
+  const handleCreateTempPassword = async () => {
     // 验证输入
     if (!tempPasswordName.trim()) {
       alert("请输入密码名称");
       return;
     }
 
-    // 根据类型验证额外参数
     if (tempPasswordType === "time_limited") {
       if (!tempPasswordValidFrom || !tempPasswordValidUntil) {
         alert("请设置有效期");
@@ -1189,13 +1168,11 @@ export const SettingsScreen: React.FC<Props> = ({
       }
     }
 
-    // 生成随机密码
     const password = generateRandomPassword();
 
-    // 计算有效期（秒）
     let expires = 0;
     if (tempPasswordType === "one_time") {
-      expires = 24 * 60 * 60; // 一次性密码默认24小时有效
+      expires = 24 * 60 * 60;
     } else if (tempPasswordType === "time_limited") {
       const validUntilDate = new Date(tempPasswordValidUntil);
       const now = new Date();
@@ -1205,51 +1182,52 @@ export const SettingsScreen: React.FC<Props> = ({
         return;
       }
     } else if (tempPasswordType === "count_limited") {
-      expires = 7 * 24 * 60 * 60; // 限次密码默认7天有效
+      expires = 7 * 24 * 60 * 60;
     }
 
-    // 设置处理状态
     setPasswordOperationStatus("processing");
     setPasswordOperationMessage("正在创建临时密码...");
 
-    // 使用回调函数或直接发送命令
-    if (onTempPasswordCreate) {
-      onTempPasswordCreate(tempPasswordName, tempPasswordType, {
-        validFrom: tempPasswordValidFrom || undefined,
-        validUntil: tempPasswordValidUntil || undefined,
-        maxUses:
-          tempPasswordType === "count_limited"
-            ? tempPasswordMaxUses
-            : undefined,
-      });
-    } else {
-      // 发送创建临时密码命令（使用 lock_control）
-      deviceService.sendCommand({
-        type: "lock_control",
-        command: "temp_code",
-        code: password,
-        expires: expires,
-        name: tempPasswordName,
-        password_type: tempPasswordType,
-        max_uses:
-          tempPasswordType === "count_limited"
-            ? tempPasswordMaxUses
-            : undefined,
-      });
-    }
+    try {
+      if (onTempPasswordCreate) {
+        onTempPasswordCreate(tempPasswordName, tempPasswordType, {
+          validFrom: tempPasswordValidFrom || undefined,
+          validUntil: tempPasswordValidUntil || undefined,
+          maxUses:
+            tempPasswordType === "count_limited"
+              ? tempPasswordMaxUses
+              : undefined,
+        });
+      } else {
+        await deviceService.sendCommand(
+          {
+            type: "lock_control",
+            command: "temp_code",
+            code: password,
+            expires: expires,
+            name: tempPasswordName,
+            password_type: tempPasswordType,
+            max_uses:
+              tempPasswordType === "count_limited"
+                ? tempPasswordMaxUses
+                : undefined,
+          },
+          10000,
+          "ack",
+        );
+      }
 
-    // 模拟成功响应（实际应由服务器响应触发）
-    setTimeout(() => {
       setPasswordOperationStatus("success");
       setPasswordOperationMessage(`临时密码创建成功: ${password}`);
-      // 刷新密码列表
       deviceService.sendUserMgmtCommand("password", "query");
-      // 延迟关闭弹窗
       setTimeout(() => {
         setShowCreateTempPasswordModal(false);
         resetPasswordForm();
       }, 2000);
-    }, 1000);
+    } catch (e: any) {
+      setPasswordOperationStatus("failed");
+      setPasswordOperationMessage(e.message || "创建临时密码失败");
+    }
   };
 
   // 密码管理 - 取消创建临时密码

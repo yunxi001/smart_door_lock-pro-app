@@ -56,16 +56,16 @@ export const VisitNotificationModal: React.FC<Props> = ({
     }
   };
 
-  // 构建图片 URL
+  // 构建图片 URL (v6.0: image 可能是 data URL、blob URL 或 base64 字符串)
   const getImageUrl = (): string => {
     if (data.image) {
-      // 如果有 Base64 数据，直接使用
-      return data.image.startsWith("data:")
-        ? data.image
-        : `data:image/jpeg;base64,${data.image}`;
+      if (data.image.startsWith("data:") || data.image.startsWith("blob:")) {
+        return data.image;
+      }
+      return `data:image/jpeg;base64,${data.image}`;
     }
-    // 否则使用图片路径
-    return data.image_path || "";
+    // image_path 是服务器路径，不能直接用作 URL；由 App.tsx 异步下载
+    return "";
   };
 
   const imageUrl = getImageUrl();
